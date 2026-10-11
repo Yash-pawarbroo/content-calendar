@@ -34,15 +34,38 @@
       onSnapshot:function(cb){watch(c,function(){var m=cache[c]||{};cb({exists:id in m,id:id,data:function(){return m[id]}})});return function(){}}
     }}
   };
-  function say(t){var n=document.getElementById('notice');if(n){n.textContent=t;n.hidden=!t}}
-  function part(q,blob,tries){return api('/api/part?'+q,{method:'PUT',body:blob}).catch(function(e){if(tries<=1)throw e;return new Promise(function(r){setTimeout(r,2500)}).then(function(){return part(q,blob,tries-1)})})}
+  function size(b){return b>=1073741824?(b/1073741824).toFixed(2)+' GB':b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'}
+  var card=null,hideT=null;
+  function progress(name,done,total,state){
+    if(!card){card=document.createElement('div');card.setAttribute('role','status');
+      card.setAttribute('style','position:fixed;right:20px;bottom:20px;z-index:90;width:min(340px,calc(100vw - 32px));background:#fff;color:#1f1c19;border:1px solid #e6dfd3;border-radius:14px;box-shadow:0 12px 36px rgba(31,28,25,.18);padding:14px 16px;font:14px/1.4 "Hanken Grotesk",system-ui,sans-serif');
+      card.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><b class="n" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0"></b><b class="p" style="font-variant-numeric:tabular-nums"></b></div><div style="height:8px;background:#efe9de;border-radius:4px;overflow:hidden;margin:9px 0 7px"><i class="f" style="display:block;height:100%;width:0;background:#1f1c19;border-radius:4px;transition:width .2s"></i></div><div class="t" style="color:#6b655d;font-variant-numeric:tabular-nums"></div>';
+      document.body.appendChild(card)}
+    clearTimeout(hideT);card.hidden=false;
+    var pct=total?Math.min(100,Math.floor(done/total*100)):0;
+    card.querySelector('.n').textContent=name||'File';
+    card.querySelector('.p').textContent=state==='error'?'Stopped':state==='done'?'Done':pct+'%';
+    card.querySelector('.f').style.width=(state==='done'?100:pct)+'%';
+    card.querySelector('.f').style.background=state==='error'?'#c0271f':state==='done'?'#1f7a45':'#1f1c19';
+    card.querySelector('.t').textContent=state==='error'?'The upload did not finish.':state==='done'?size(total)+' uploaded':size(done)+' of '+size(total)+' uploaded. Keep this page open.';
+    if(state)hideT=setTimeout(function(){if(card)card.hidden=true},state==='done'?2500:6000);
+  }
+  function part(q,blob,tries,onp){
+    return new Promise(function(res,rej){
+      var x=new XMLHttpRequest();x.open('PUT',BASE+'/api/part?'+q);if(KEY)x.setRequestHeader('x-upload-key',KEY);
+      x.upload.onprogress=function(e){onp(e.loaded)};
+      x.onload=function(){var j={};try{j=JSON.parse(x.responseText)}catch(e){}if(x.status>=200&&x.status<300)res(j);else rej(new Error(j.error||'The upload did not finish.'))};
+      x.onerror=function(){rej(new Error('The connection dropped.'))};x.send(blob);
+    }).catch(function(e){if(tries<=1)throw e;onp(0);return new Promise(function(r){setTimeout(r,2500)}).then(function(){return part(q,blob,tries-1,onp)})});
+  }
   var assets={
-    upload:function(file,opt){var info,parts=[],n=Math.max(1,Math.ceil(file.size/CHUNK)),i=0,type=(opt&&opt.type)||file.type||'application/octet-stream';
+    upload:function(file,opt){var info,parts=[],n=Math.max(1,Math.ceil(file.size/CHUNK)),i=0,type=(opt&&opt.type)||file.type||'application/octet-stream',nm=file.name||'File';
+      progress(nm,0,file.size);
       function next(){if(i>=n)return api('/api/complete',{method:'POST',body:JSON.stringify({key:info.key,uploadId:info.uploadId,parts:parts})});
-        return part('key='+encodeURIComponent(info.key)+'&uploadId='+encodeURIComponent(info.uploadId)+'&n='+(i+1),file.slice(i*CHUNK,Math.min(file.size,(i+1)*CHUNK)),4).then(function(p){parts.push(p);i++;
-          say('Uploading '+(file.name||'file')+': '+Math.round(Math.min(file.size,i*CHUNK)/file.size*100)+'%. Keep this page open.');return next()})}
+        var base=i*CHUNK;
+        return part('key='+encodeURIComponent(info.key)+'&uploadId='+encodeURIComponent(info.uploadId)+'&n='+(i+1),file.slice(base,Math.min(file.size,base+CHUNK)),4,function(l){progress(nm,Math.min(file.size,base+l),file.size)}).then(function(p){parts.push(p);i++;return next()})}
       return api('/api/create',{method:'POST',body:JSON.stringify({name:file.name,type:type,blob:true})}).then(function(d){info=d;return next()}).then(function(){
-        return {id:info.id,url:'/_blob/'+info.id,sizeBytes:file.size,contentType:type}},function(e){if(info)api('/api/abort',{method:'POST',body:JSON.stringify(info)}).catch(function(){});throw e})},
+        progress(nm,file.size,file.size,'done');return {id:info.id,url:'/_blob/'+info.id,sizeBytes:file.size,contentType:type}},function(e){progress(nm,0,file.size,'error');if(info)api('/api/abort',{method:'POST',body:JSON.stringify(info)}).catch(function(){});throw e})},
     list:function(){return api('/api/usage').then(function(u){return {assets:[],usage:u}})},
     delete:function(id){return api('/api/blob-delete',{method:'POST',body:JSON.stringify({id:String(id).replace(/^.*\//,'')})}).then(function(){return {deleted:true}})}
   };
