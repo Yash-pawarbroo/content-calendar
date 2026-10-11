@@ -16,6 +16,12 @@
     if(me&&(!adminOnly||me.role==='owner')){try{localStorage.setItem('csc.pass',code)}catch(e){}location.reload();return true}return false}).catch(function(){return false})}
   window.CSC.signIn=function(code){return trySign(code,false)};
   window.CSC.adminSignIn=function(code){return trySign(code,true)};
+  function post(path,body){return fetch(BASE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'Something went wrong.');return j})},function(){throw new Error('Could not reach the server. Check your connection and try again.')})}
+  function keep(j){try{localStorage.setItem('csc.pass',j.token)}catch(e){}location.reload();return j}
+  window.CSC.login=function(email,password){return post('/api/login',{email:email,password:password}).then(keep)};
+  window.CSC.signup=function(o){return post('/api/signup',o).then(keep)};
+  window.CSC.users=function(){return api('/api/users').then(function(j){return j.users})};
+  window.CSC.userUpdate=function(o){return api('/api/user-update',{method:'POST',body:JSON.stringify(o)})};
   var nodb={collection:function(){return {onSnapshot:function(cb){setTimeout(function(){cb({docs:[]})},0);return function(){}}}},
     doc:function(){return {set:function(){return Promise.reject({code:'invalid_argument'})},delete:function(){return Promise.reject({code:'invalid_argument'})},onSnapshot:function(cb){setTimeout(function(){cb({exists:false,data:function(){}})},0);return function(){}}}}};
 
@@ -73,7 +79,7 @@
   var user={can:function(){return Promise.resolve(true)},isOwner:function(){return Promise.resolve(true)},canEdit:function(){return Promise.resolve(true)},id:function(){return Promise.resolve(null)},
     me:function(){var m=window.CSC.me||{};return Promise.resolve({id:null,name:m.name||'',avatarUrl:'',email:null,isOwner:m.role==='owner',canEdit:true})}};
   var caps={db:db,assets:assets,downloads:downloads,user:user};
-  window.claude={use:function(n){return ready.then(function(){if(!window.CSC.me)return n==='db'?nodb:n==='user'?{can:function(){return Promise.resolve(false)},me:user.me}:null;return caps[n]||null})}};
+  window.claude={use:function(n){return ready.then(function(){if(!window.CSC.me||window.CSC.me.role==='pending')return n==='db'?nodb:n==='user'?{can:function(){return Promise.resolve(false)},me:user.me}:null;return caps[n]||null})}};
 })();
 </script>
 <style>
@@ -389,6 +395,7 @@ div.trow.advrow{cursor:default}
 dialog.wide{width:min(980px,calc(100vw - 32px))}
 .fullpv{background:#17140f;border-radius:12px;overflow:hidden;display:grid;place-items:center}
 .fullpv video,.fullpv img{display:block;max-width:100%;max-height:68vh;width:100%;object-fit:contain}
+@media(min-width:861px){.trow.acrow.pprow{grid-template-columns:minmax(0,1fr) 90px minmax(0,1.1fr) minmax(0,1.4fr) 270px !important}}
 </style>
 
 <div class="app">
@@ -458,6 +465,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
+let authMode='login', authRole='client', authV={}, people=[], peopleLoaded=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -486,7 +494,7 @@ function isEditor(){return canWrite&&role==='editor'}
 function who(){if(CSC&&!CSC.me)return 'Guest';if(isGuest())return edName||'Guest';return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
 function isGuest(){return !!(CSC&&CSC.me&&CSC.me.role==='guest')}
 function isAdmin(){return CSC?!!(CSC.me&&CSC.me.role==='owner'):isOwner()}
-function roleLabel(){return CSC&&CSC.me?({owner:'Admin',editor:'Editor',client:'Client'}[CSC.me.role]||'Member'):(role==='owner'?'Owner':'Editor')}
+function roleLabel(){return CSC&&CSC.me?({owner:'Admin',editor:'Editor',client:'Client',pending:'Waiting for approval'}[CSC.me.role]||'Member'):(role==='owner'?'Owner':'Editor')}
 function hasLegacy(v){return okAsset(v.rawAsset)||!!safeUrl(v.rawUrl)}
 function materials(v){
   const out=[];
@@ -843,20 +851,25 @@ function vTeam(){
     '<section class="card" style="grid-column:1 / -1"><span class="ctitle">Adding people</span><p class="meta">People are added from the Share button on this page. Give editors “Editor” access so they can upload files. Everyone you add can see every client in this workspace; per-client access is not available in this prototype.</p></section></div>';
 }
 function vAdmin(){
-  if(!isAdmin()&&CSC)return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Admin</h2><section class="card" style="margin-top:18px"><label class="meta" for="adminPw">Password</label><input id="adminPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="adminin">Sign in</button><p class="err" id="adminErr" hidden></p></section><p class="meta" style="margin-top:12px">Admins manage people, access codes and clients.</p></div>';
+  if(!isAdmin()&&CSC)return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Admin</h2><section class="card" style="margin-top:18px"><label class="meta" for="adminPw">Password</label><input id="adminPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="adminin">Sign in</button><p class="err" id="adminErr" hidden></p></section><p class="meta" style="margin-top:12px">Admins manage people and clients.</p></div>';
   if(!isAdmin())return emptyBox('check','Admins only','Ask the workspace admin for access.');
   let h='<div class="pagehead"><div><div class="eyebrow">ADMIN</div><h2 class="ptitle">Admin</h2><p class="meta">People, access and clients for this workspace.</p></div></div>';
-  h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People and access</span><span class="meta">'+(CSC?access.length+' access codes':'')+'</span></div>';
+  const pend=people.filter(u=>!u.ok).length;
+  h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People</span><span class="meta">'+(CSC?people.length+(people.length===1?' account':' accounts')+(pend?' · '+pend+' waiting for approval':''):'')+'</span></div>';
   if(CSC){
-    h+='<p class="meta">Give each editor or client their own access code. Editors can upload edits for the clients you choose. Clients see only their own videos. Removing a code ends that person’s access.</p>';
-    if(access.length){h+='<div class="table"><div class="trow th acrow"><span>NAME</span><span>ROLE</span><span>CLIENT</span><span>ACCESS CODE</span><span></span></div>';
-      access.forEach(a=>{const w=wsOf(a.ws);h+='<div class="trow acrow"><span class="t1">'+esc(a.name)+'</span><span><span class="badge'+(a.role==='editor'?' blue':'')+'">'+(a.role==='editor'?'Editor':'Client')+'</span></span><span class="meta">'+esc(w?w.name:'All clients')+'</span><span class="num" style="overflow-wrap:anywhere">'+esc(a.code)+'</span><span class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm" data-act="copycode" data-arg="'+esc(a.code)+'">Copy</button>'+
-        (armedDelete==='ac:'+a.id?'<button class="btn sm danger" data-act="rmaccess" data-id="'+esc(a.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="rmaccess" data-id="'+esc(a.id)+'" aria-label="Remove access for '+esc(a.name)+'">'+ic('trash',14)+'</button>')+'</span></div>'});
+    h+='<p class="meta">Clients sign up and get their own workspace straight away; they see only their own videos. Editors sign up and wait here until you approve them.</p>';
+    if(!peopleLoaded)h+='<p class="meta">Loading people…</p>';
+    else if(!people.length)h+='<p class="meta">Nobody has signed up yet.</p>';
+    else{h+='<div class="table"><div class="trow th acrow pprow"><span>NAME</span><span>ROLE</span><span>CLIENT</span><span>EMAIL</span><span></span></div>';
+      people.slice().sort((a,b)=>(a.ok-b.ok)||(b.createdAt-a.createdAt)).forEach(u=>{const w=wsOf(u.ws),ed=u.role==='editor';
+        h+='<div class="trow acrow pprow"><span class="t1">'+esc(u.name)+'</span><span><span class="badge'+(u.ok?(ed?' blue':''):' warn')+'">'+(u.ok?(ed?'Editor':'Client'):'Waiting')+'</span></span>'+
+          '<span class="meta">'+(ed?'<select class="field pplWs" data-id="'+esc(u.id)+'" aria-label="Clients '+esc(u.name)+' can work on"><option value="">All clients</option>'+workspaces.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===u.ws?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>':esc(w?w.name:''))+'</span>'+
+          '<span class="meta" style="overflow-wrap:anywhere">'+esc(u.email)+'</span><span class="row" style="justify-content:flex-end;flex-wrap:nowrap">'+
+          (u.ok?'':'<button class="btn sm dark" data-act="pplok" data-id="'+esc(u.id)+'">Approve</button>')+'<button class="btn sm" data-act="pplpw" data-id="'+esc(u.id)+'">Reset password</button>'+
+          (armedDelete==='pp:'+u.id?'<button class="btn sm danger" data-act="pplrm" data-id="'+esc(u.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="pplrm" data-id="'+esc(u.id)+'" aria-label="Remove '+esc(u.name)+'">'+ic('trash',14)+'</button>')+'</span></div>'});
       h+='</div>'}
-    h+='<div class="acform"><input id="acName" class="field" data-key="acn" maxlength="40" placeholder="Name" aria-label="Name"><select id="acRole" class="field" aria-label="Role"><option value="editor">Editor</option><option value="client">Client</option></select>'+
-      '<select id="acWs" class="field" aria-label="Client"><option value="">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')+'</select><button class="btn dark" data-act="addaccess">'+ic('plus')+'Create access code</button></div><p class="err" id="acErr" hidden></p>'+
-      '<p class="meta">Share this address with them: <b style="color:var(--ink)">'+esc(location.origin)+'</b></p>';
-  }else h+='<p class="meta">In this version people are added with the Share button at the top of the page. Individual access codes for editors and clients are available in the hosted version.</p>';
+    h+='<p class="err" id="pplErr" hidden></p><p class="meta">Share this address with them: <b style="color:var(--ink)">'+esc(location.origin)+'</b></p>';
+  }else h+='<p class="meta">In this version people are added with the Share button at the top of the page. Sign-up and log-in are available in the hosted version.</p>';
   h+='</section>';
   const vs=videos.slice().sort((a,b)=>videoBytes(b)-videoBytes(a)),tot=vs.reduce((n,v)=>n+videoBytes(v),0);
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Videos and storage</span><span class="meta">'+vs.length+(vs.length===1?' video':' videos')+(tot?' · '+fmtSize(tot)+' in uploaded files':'')+(usage&&usage.maxBytes?' · '+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used':'')+'</span></div>';
@@ -874,8 +887,22 @@ function vAdmin(){
   return h+'</section>';
 }
 function vSignIn(){
-  return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Sign in</h2><section class="card" style="margin-top:18px"><label class="meta" for="accPw">Access code</label><input id="accPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="accin">Continue</button><p class="err" id="accErr" hidden></p></section><p class="meta" style="margin-top:12px">Editors and clients sign in with the code their admin gave them. Admins sign in from Admin, at the bottom of the menu.</p></div>';
+  const up=authMode==='signup',cl=authRole==='client';
+  return '<div class="adminin authbox"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">'+(up?'Create your account':'Log in')+'</h2><section class="card" style="margin-top:18px">'+
+    '<div class="two"><button class="btn'+(up?'':' dark')+'" data-act="authmode" data-arg="login" aria-pressed="'+(!up)+'">Log in</button><button class="btn'+(up?' dark':'')+'" data-act="authmode" data-arg="signup" aria-pressed="'+up+'">Sign up</button></div>'+
+    (up?'<span class="meta">I am</span><div class="two"><button class="btn'+(cl?' dark':'')+'" data-act="authrole" data-arg="client" aria-pressed="'+cl+'">A client</button><button class="btn'+(cl?'':' dark')+'" data-act="authrole" data-arg="editor" aria-pressed="'+(!cl)+'">An editor</button></div>'+
+      '<label class="meta" for="authName">Your name</label><input id="authName" class="field" maxlength="40" autocomplete="name" value="'+esc(authV.name||'')+'">'+
+      (cl?'<label class="meta" for="authBrand">Brand or channel name</label><input id="authBrand" class="field" maxlength="40" placeholder="Shown as your workspace name" value="'+esc(authV.brand||'')+'">':''):'')+
+    '<label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" value="'+esc(authV.email||'')+'">'+
+    '<label class="meta" for="authPw">Password</label><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'">'+
+    '<button class="btn dark wide" data-act="authgo">'+(up?'Create account':'Log in')+'</button><p class="err" id="authErr" hidden></p></section>'+
+    '<p class="meta" style="margin-top:12px">'+(up?(cl?'You get your own workspace, where you upload your A-roll, B-roll and script and approve the edits.':'After you sign up, the admin approves your account. Then you can download source files and upload edits.'):'Forgot your password? Ask the admin to reset it.')+'</p></div>';
 }
+function vPending(){
+  return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Waiting for approval</h2><section class="card" style="margin-top:18px"><p class="meta">Thanks, '+esc(CSC.me.name||'there')+'. Your editor account is created. You can start as soon as the admin approves it.</p><button class="btn dark wide" data-act="recheck">Check again</button></section></div>';
+}
+function loadPeople(){if(!(CSC&&CSC.users&&isAdmin()))return;CSC.users().then(u=>{people=u;peopleLoaded=true;if(view==='admin')renderAll()},()=>{})}
+function pplErr(e){const p=$('#pplErr');if(p){p.textContent=(e&&e.message)||'That did not work. Try again.';p.hidden=false}}
 function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
   return '<div class="pagehead"><h2 class="ptitle">Settings</h2></div><div class="grid2"><section class="card"><span class="ctitle">Profile</span><label class="meta" for="edName">Name shown on uploads and notes</label><input id="edName" class="field" maxlength="40" placeholder="'+esc(profileName||'Your name')+'" value="'+esc(edName)+'">'+
@@ -890,6 +917,7 @@ function renderAll(){
   let html;
   if(db&&!(wsLoaded&&vidLoaded))html=emptyBox('video','Loading your workspace','Clients and videos will appear here.');
   else if(CSC&&!CSC.me)html=view==='admin'?vAdmin():vSignIn();
+  else if(CSC&&CSC.me.role==='pending')html=vPending();
   else if(!workspaces.length&&view!=='team'&&view!=='settings'&&view!=='admin')html=emptyBox('user','Start with your first client',isAdmin()?'Each client gets its own videos and calendar.':'Nothing here yet. The admin adds clients from the Admin page.',isAdmin()?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'');
   else html=({overview:vOverview,calendar:vCalendar,videos:vVideos,project:vProject,clients:vClients,analytics:vAnalytics,team:vTeam,settings:vSettings,admin:vAdmin}[view]||vVideos)();
   if(html!==lastHtml){
@@ -1069,6 +1097,27 @@ document.addEventListener('click',async ev=>{
     appSettings=Object.assign({},appSettings,{open:b.dataset.arg==='1'});lastHtml='';renderAll();
     if(db){try{await db.doc('settings/app').set(appSettings)}catch(x){fail(x)}}
   }
+  else if(act==='authmode'||act==='authrole'){
+    authV={name:val('authName')||authV.name||'',brand:val('authBrand')||authV.brand||'',email:val('authEmail')||authV.email||''};
+    if(act==='authmode')authMode=b.dataset.arg;else authRole=b.dataset.arg;renderAll();
+  }
+  else if(act==='authgo'){
+    const e=$('#authErr'),email=val('authEmail'),pw=($('#authPw')||{}).value||'',say=m=>{b.disabled=false;e.textContent=m;e.hidden=false};
+    if(!email||!pw)return say('Enter your email and password.');
+    if(authMode==='signup'&&!val('authName'))return say('Enter your name.');
+    b.disabled=true;e.hidden=true;
+    try{if(authMode==='signup')await CSC.signup({name:val('authName'),brand:val('authBrand'),email,password:pw,role:authRole});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
+  }
+  else if(act==='recheck')location.reload();
+  else if(act==='pplok'){b.disabled=true;try{await CSC.userUpdate({id,ok:true})}catch(x){pplErr(x)}loadPeople()}
+  else if(act==='pplpw'){
+    const u=people.find(x=>x.id===id),pw=prompt('New password for '+(u?u.name:'this person')+' (at least 6 characters). Tell them the new password yourself.');
+    if(pw){try{await CSC.userUpdate({id,password:pw});notice('Password changed. They need to log in again.')}catch(x){pplErr(x)}}
+  }
+  else if(act==='pplrm'){
+    if(armedDelete!=='pp:'+id){armedDelete='pp:'+id;renderAll();return}
+    armedDelete=null;try{await CSC.userUpdate({id,remove:true})}catch(x){pplErr(x)}loadPeople();
+  }
   else if(act==='accin'){
     const pw=val('accPw'),e=$('#accErr');if(!pw)return;b.disabled=true;
     const ok=CSC&&CSC.signIn?await CSC.signIn(pw):false;
@@ -1183,7 +1232,8 @@ document.addEventListener('keydown',async e=>{
   e.preventDefault();z.classList.toggle('over',type==='dragover');
   if(type==='drop'&&e.dataTransfer&&e.dataTransfer.files.length){const [id,arg]=z.dataset.dz.split('|'),[k,vs]=arg.split(':');if(k==='edited')stageEdit(id,e.dataTransfer.files[0]);else await uploadFiles(id,k,+vs||1,e.dataTransfer.files)}
 }));
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
+document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('pplWs')&&CSC)CSC.userUpdate({id:t.dataset.id,ws:t.value}).then(loadPeople,pplErr)});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^auth(Name|Brand|Email|Pw)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="authgo"]');if(b)b.click();return}if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
 $('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
 $('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDlg()});
@@ -1210,6 +1260,7 @@ readHash();if(!role)role='owner';renderAll();
   if(!db){wsLoaded=vidLoaded=true;notice('Saving is not available in this view, so changes stay on this screen only. Sign in to Claude to save and share them.');renderAll();return}
   renderAll();refreshUsage();
   const onErr=()=>notice('The live connection stopped. Reload the page to reconnect.');
+  loadPeople();setInterval(()=>{if(view==='admin'&&!document.hidden)loadPeople()},20000);
   db.collection('workspaces').onSnapshot(s=>{workspaces=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));wsLoaded=true;renderAll()},onErr);
   if(CSC&&isAdmin())db.collection('access').onSnapshot(s=>{access=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));renderAll()},()=>{});
   db.doc('settings/app').onSnapshot(d=>{appSettings=d.exists?Object.assign({},d.data()):{};renderAll()},()=>{});
