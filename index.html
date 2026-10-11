@@ -431,6 +431,8 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .invitebox{margin-bottom:14px}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
+.authswap{margin:0;text-align:center}.authswap .authlink{font-size:inherit;color:var(--ink);font-weight:600;padding:0}
+.authnote{margin:0;padding-top:12px;border-top:1px solid var(--line);text-align:center}
 .authlink{align-self:center;border:0;background:none;font:inherit;font-size:.84rem;color:var(--muted,#6b6459);text-decoration:underline;cursor:pointer;padding:4px}
 .authlink:hover{color:var(--ink)}
 @media(max-width:760px){.auth{grid-template-columns:1fr}.authside{padding:22px}.authside h1{font-size:1.2rem;margin:4px 0}.authpt{display:none}.authform{padding:22px 18px}}
@@ -530,7 +532,7 @@ function extOf(n){return (String(n||'').split('.').pop()||'').toLowerCase()}
 function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return 'Link'}}
 function fileBase(v){return (v.title||'video').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,60)||'video'}
 function isOwner(){return canWrite&&role==='owner'}
-function isEditor(){return canWrite&&role==='editor'}
+function isEditor(){return canWrite&&(role==='editor'||!!(CSC&&isAdmin()))}
 function who(){if(CSC&&!CSC.me)return 'Guest';if(isGuest())return edName||'Guest';return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
 function isClient(){return !!(CSC&&CSC.me&&CSC.me.role==='client')}
 function isGuest(){return !!(CSC&&CSC.me&&CSC.me.role==='guest')}
@@ -659,7 +661,7 @@ function renderTop(){
   $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Clients',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
-  if(CSC){const g=isGuest(),sw=g||(CSC.me&&CSC.me.role==='owner');$('#roleSel').hidden=!sw;const rt=$('#roleTxt');rt.hidden=sw;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
+  if(CSC){const g=isGuest(),sw=false;$('#roleSel').hidden=!sw;const rt=$('#roleTxt');rt.hidden=sw;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
 }
 
 /* ---------- views ---------- */
@@ -943,17 +945,14 @@ function authWrap(title,sub,inner){
 }
 function vSignIn(){
   const up=authMode==='signup',jn=!!(CSC&&CSC.join);
-  if(jn&&joinBad)return authWrap('This invite link has expired','Ask your team for a new invite link.','<button type="button" class="btn dark wide" data-act="nojoin">Go to log in</button>');
-  return authWrap(up?(jn?'Join '+esc(joinName||'your team'):'Create your workspace'):'Welcome back',up?(jn?'Create your editor account.':'For agencies and editing teams. It takes a minute.'):'Log in to your team workspace.',
-    '<div class="seg"><button type="button" class="'+(up?'':'on')+'" data-act="authmode" data-arg="login" aria-pressed="'+(!up)+'">Log in</button><button type="button" class="'+(up?'on':'')+'" data-act="authmode" data-arg="signup" aria-pressed="'+up+'">'+(jn?'Join as editor':'Create a workspace')+'</button></div>'+
-    (up?'<div class="'+(jn?'':'two')+'"><div><label class="meta" for="authName">Your name</label><input id="authName" class="field" maxlength="40" autocomplete="name" value="'+esc(authV.name||'')+'"></div>'+
-      (jn?'':'<div><label class="meta" for="authBrand">Team or agency name</label><input id="authBrand" class="field" maxlength="40" autocomplete="organization" value="'+esc(authV.brand||'')+'"></div>')+'</div>':'')+
-    '<div><label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com" value="'+esc(authV.email||'')+'"></div>'+
-    '<div><label class="meta" for="authPw">Password</label><div class="pwrow"><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'"'+(up?' placeholder="At least 6 characters"':'')+'><button type="button" class="btn sm" data-act="showpw" aria-label="Show or hide the password">Show</button></div></div>'+
-    '<p class="err" id="authErr" hidden></p><button class="btn dark wide" data-act="authgo">'+(up?(jn?'Join team':'Create workspace'):'Log in')+'</button>'+
-    '<p class="meta">'+(up?(jn?(joinAuto?'You can start on this client’s videos as soon as you sign up.':'Your team’s admin approves your account and chooses the clients you work on.'):'You become the admin of your own workspace: add clients, invite editors, and keep every video in one place.'):'Forgot your password? Ask your team’s admin to reset it.')+'</p>'+
-    '<div class="clientnote">'+ic('user',16)+'<span><b>Are you a client?</b> You don’t need an account. Open the private link your team sent you.</span></div>'+
-    (jn?'':'<div class="clientnote">'+ic('video',16)+'<span><b>Are you an editor?</b> Ask your client or team for their invite link, then sign up from it.</span></div>')+
+  if(jn&&joinBad)return authWrap('This invite link has expired','Ask for a new invite link.','<button type="button" class="btn dark wide" data-act="nojoin">Go to sign in</button>');
+  return authWrap(up?(jn?'Join '+esc(joinName||'your team'):'Make room for your videos'):'Welcome back',up?(jn?'Create your editor account.':'Create your workspace account.'):'Sign in to your workspace.',
+    '<div><label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" value="'+esc(authV.email||'')+'"></div>'+
+    '<div><label class="meta" for="authPw">'+(up?'New password':'Password')+'</label><div class="pwrow"><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'"><button type="button" class="btn sm" data-act="showpw" aria-label="Show or hide the password">Show</button></div>'+
+    '<p class="meta" style="margin-top:4px">'+(up?'At least 6 characters.':'Forgot your password? Ask your workspace admin to reset it.')+'</p></div>'+
+    '<p class="err" id="authErr" hidden></p><button class="btn dark wide" data-act="authgo">'+(up?'Create account':'Sign in')+'</button>'+
+    '<p class="meta authswap">'+(up?'Already have an account? <button type="button" class="authlink" data-act="authmode" data-arg="login">Sign in</button>':'New here? <button type="button" class="authlink" data-act="authmode" data-arg="signup">'+(jn?'Join as an editor':'Create an account')+'</button>')+'</p>'+
+    '<p class="meta authnote">Working with a client? They can open their private workspace link without an account.'+(jn?'':' Editors join from the invite link their client sends them.')+'</p>'+
     '<button type="button" class="authlink" data-act="nav" data-view="admin">Site owner sign in</button>');
 }
 function vPending(){
@@ -988,7 +987,7 @@ function pplErr(e){const p=$('#pplErr');if(p){p.textContent=(e&&e.message)||'Tha
 function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
   return '<div class="pagehead"><h2 class="ptitle">Settings</h2></div><div class="grid2"><section class="card"><span class="ctitle">Profile</span><label class="meta" for="edName">Name shown on uploads and notes</label><input id="edName" class="field" maxlength="40" placeholder="'+esc(profileName||'Your name')+'" value="'+esc(edName)+'">'+
-    (CSC&&!isGuest()&&!isAdmin()?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
+    (CSC?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
     '<section class="card"><span class="ctitle">Connections</span><div class="row">'+ic('insta')+'<b>Instagram</b><span class="badge">Not connected</span></div><p class="meta">Automatic likes, comments, shares and comment feeds need an Instagram connection, which this prototype does not have. Numbers are entered by hand.</p>'+
     '<span class="ctitle">Large files</span><label class="meta" for="upUrl">Address of your large-file upload page. When set, an “Upload a large file” button appears next to every link box.</label>'+
     (isOwner()?'<div class="row" style="flex-wrap:nowrap"><input id="upUrl" class="field grow" type="url" placeholder="https://…workers.dev" value="'+esc(appSettings.uploaderUrl||'')+'"><button class="btn" data-act="saveset">Save</button></div><p class="err" id="setErr" hidden></p>':'<p class="meta">'+(safeUrl(appSettings.uploaderUrl)?esc(appSettings.uploaderUrl):'Not set up yet.')+'</p>')+
@@ -1187,10 +1186,8 @@ document.addEventListener('click',async ev=>{
   else if(act==='authgo'){
     const e=$('#authErr'),email=val('authEmail'),pw=($('#authPw')||{}).value||'',say=m=>{b.disabled=false;e.textContent=m;e.hidden=false};
     if(!email||!pw)return say('Enter your email and password.');
-    if(authMode==='signup'&&!val('authName'))return say('Enter your name.');
-    if(authMode==='signup'&&!CSC.join&&!val('authBrand'))return say('Enter your team or agency name.');
     b.disabled=true;e.hidden=true;
-    try{if(authMode==='signup')await CSC.signup(CSC.join?{name:val('authName'),email,password:pw,join:CSC.join}:{name:val('authName'),team:val('authBrand'),email,password:pw});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
+    try{if(authMode==='signup')await CSC.signup(CSC.join?{email,password:pw,join:CSC.join}:{email,password:pw});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
   }
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
@@ -1344,6 +1341,7 @@ readHash();if(!role)role='owner';renderAll();
       const user=await c.use('user');
       if(user){
         const w=await user.can('data.write');if(w===false){canWrite=false;if(!CSC)notice('You have view-only access to this workspace.')}
+        if(CSC&&CSC.me&&CSC.me.role==='owner')role='owner';
         if(CSC&&CSC.me&&CSC.me.role!=='guest'&&CSC.me.role!=='owner'){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
         try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
           if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
