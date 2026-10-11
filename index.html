@@ -26,7 +26,7 @@
   window.CSC.links=function(){return api('/api/links').then(function(j){return j.links})};
   window.CSC.link=function(ws,renew){return api('/api/link',{method:'POST',body:JSON.stringify({ws:ws,renew:!!renew})}).then(function(j){return j.token})};
   window.CSC.invite=function(ws,renew){return api('/api/invite',{method:'POST',body:JSON.stringify({ws:ws||'',renew:!!renew})}).then(function(j){return j.token})};
-  window.CSC.ig={status:function(ws){return api('/api/ig/status?ws='+encodeURIComponent(ws))},media:function(ws){return api('/api/ig/media?ws='+encodeURIComponent(ws))},
+  window.CSC.ig={status:function(ws){return api('/api/ig/status?ws='+encodeURIComponent(ws))},index:function(ws){return api('/api/ig/index?ws='+encodeURIComponent(ws))},page:function(ws,k){return api('/api/ig/page?ws='+encodeURIComponent(ws)+'&k='+k)},
     start:function(ws){return api('/api/ig/start',{method:'POST',body:JSON.stringify({ws:ws,back:location.origin+location.pathname})})},
     sync:function(ws){return api('/api/ig/sync',{method:'POST',body:JSON.stringify({ws:ws})})},disconnect:function(ws){return api('/api/ig/disconnect',{method:'POST',body:JSON.stringify({ws:ws})})}};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
@@ -562,7 +562,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,media:null,loading:false,busy:false,left:0,err:''}, igSort='new', igType='all', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
+let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -1005,30 +1005,39 @@ function vClients(){
   return h+'</div>';
 }
 /* ---------- Instagram ---------- */
+/* ig.idx holds the numbers for every post (small); ig.pg holds pages of post details (caption, picture, link), fetched only for the rows on screen. */
+function igBlank(ws){return {ws:ws||'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}}
 function igWs(){return curWs!=='all'&&wsOf(curWs)?curWs:(workspaces.length===1?workspaces[0].id:'')}
+async function igTry(fn){let last;for(let i=0;i<4;i++){try{return await fn()}catch(e){last=e;if(e&&e.status&&e.status<500)throw e;await new Promise(r=>setTimeout(r,1500*(i+1)))}}throw last}
+function igTake(r){ig.idx=r.idx||{};ig.st=Object.assign({},ig.st,r.acct)}
 function loadIg(force){
   if(!CSC||!CSC.ig||!CSC.me)return;const ws=igWs();
-  if(!ws){if(ig.ws)ig={ws:'',st:null,media:null,loading:false,busy:false,left:0,err:''};return}
+  if(!ws){if(ig.ws)ig=igBlank();return}
   if(ig.ws===ws&&!force&&(ig.st||ig.loading||ig.err))return;
-  ig={ws,st:null,media:null,loading:true,busy:false,left:0,err:''};igShow=30;
-  CSC.ig.status(ws).then(st=>{
+  ig=igBlank(ws);ig.loading=true;igShow=30;
+  igTry(()=>CSC.ig.status(ws)).then(st=>{
     if(ig.ws!==ws)return;ig.st=st;ig.loading=false;renderAll();
-    if(st.connected)CSC.ig.media(ws).then(m=>{if(ig.ws!==ws)return;ig.media=m.media||[];renderAll();if(!ig.media.length||Date.now()-(st.syncedAt||0)>3600000)syncIg()},()=>{});
+    if(st.connected)igTry(()=>CSC.ig.index(ws)).then(r=>{if(ig.ws!==ws)return;igTake(r);renderAll();if(!Object.keys(ig.idx).length||Date.now()-(st.syncedAt||0)>3600000||igPending()>0)syncIg()},()=>{});
   },e=>{if(ig.ws!==ws)return;ig.loading=false;ig.err=(e&&e.message)||'Instagram could not be checked.';renderAll()});
 }
+function igPending(){let n=0;for(const k in ig.idx||{})if(!ig.idx[k].a)n++;return n}
 async function syncIg(){
-  if(ig.busy||!ig.ws||!CSC)return;const ws=ig.ws;ig.busy=true;ig.err='';renderAll();
-  try{for(let i=0;i<80;i++){
-    const r=await CSC.ig.sync(ws);if(ig.ws!==ws)return;
-    const m=await CSC.ig.media(ws);if(ig.ws!==ws)return;
-    ig.media=m.media||[];ig.st=Object.assign({},ig.st,{username:m.username,name:m.name,pic:m.pic,followers:m.followers,mediaCount:m.mediaCount,syncedAt:m.syncedAt,error:m.error});
+  if(ig.busy||!ig.ws||!CSC)return;const ws=ig.ws;ig.busy=true;ig.err='';ig.note='';renderAll();
+  try{for(let i=0;i<400;i++){
+    const r=await igTry(()=>CSC.ig.sync(ws));if(ig.ws!==ws)return;
+    const x=await igTry(()=>CSC.ig.index(ws));if(ig.ws!==ws)return;
+    igTake(x);if(r.listed){ig.pg={};ig.items={}}
     ig.left=r.remaining||0;if(r.error){ig.err=r.error;break}renderAll();if(!r.remaining)break;
-  }}catch(e){if(ig.ws===ws)ig.err=(e&&e.message)||'Instagram could not be refreshed.'}
+  }}catch(e){if(ig.ws===ws)ig.note='The connection dropped while loading. Press Refresh to carry on from where it stopped.'}
   if(ig.ws===ws){ig.busy=false;ig.left=0;renderAll()}
 }
+function igPage(k){
+  if(ig.pg[k]||!ig.ws)return;const ws=ig.ws;ig.pg[k]='loading';
+  igTry(()=>CSC.ig.page(ws,k)).then(a=>{if(ig.ws!==ws)return;ig.pg[k]='ok';(a||[]).forEach(m=>{ig.items[m.id]=m});renderAll()},()=>{if(ig.ws===ws)delete ig.pg[k]});
+}
 function ago(ms){if(!ms)return 'not yet';const m=Math.round((Date.now()-ms)/60000);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago'}
-function igN(m,k){return k==='likes'||k==='comments'?(typeof m[k]==='number'?m[k]:(m.ins&&typeof m.ins[k]==='number'?m.ins[k]:null)):(m.ins&&typeof m.ins[k==='saves'?'saved':k]==='number'?m.ins[k==='saves'?'saved':k]:null)}
-function igKind(m){return m.type==='REELS'?'Reel':m.type==='STORY'?'Story':m.kind==='CAROUSEL_ALBUM'?'Carousel':m.kind==='VIDEO'?'Video':'Post'}
+const IGK={views:'v',reach:'r',likes:'l',comments:'c',shares:'sh',saves:'sv'};
+function igN(e,k){const v=e[IGK[k]];return typeof v==='number'?v:null}
 function igPanel(){
   const box=(inner)=>'<section class="card igcard">'+inner+'</section>',head='<div class="chead"><span class="row">'+ic('insta',18)+'<span class="ctitle">Instagram</span></span>';
   if(!CSC)return box(head+'<span class="badge">Live site only</span></div><p class="meta">Connecting Instagram and live numbers work on the live site, not in this preview.</p>');
@@ -1043,23 +1052,25 @@ function igPanel(){
     return box(head+'<span class="badge">Not connected</span></div><p class="meta">Connect this client’s Instagram to see every post and reel they have published, with views, reach, likes, comments, shares and saves. It must be a Business or Creator account. We only read numbers; nothing is ever posted.</p>'+
       (st.manage?'<div class="row"><button class="btn dark" data-act="igon">'+ic('insta')+'Connect Instagram</button></div><p class="err" id="igErr" hidden></p>':'<p class="meta">The client or the workspace admin can connect it.</p>'));
   }
-  const all=ig.media||[],types=[['all','All'],['REELS','Reels'],['FEED','Posts']];
-  let list=all.filter(m=>igType==='all'||m.type===igType);
+  const idx=ig.idx||{},ids=Object.keys(idx),pend=igPending(),tk={REELS:'R',FEED:'F'}[igType];
+  let list=tk?ids.filter(id=>idx[id].k===tk):ids.slice();
   const key={views:'views',likes:'likes',comments:'comments',shares:'shares'}[igSort];
-  list=list.slice().sort(key?((a,b)=>(igN(b,key)||0)-(igN(a,key)||0)):((a,b)=>String(b.at).localeCompare(String(a.at))));
-  const sum=k=>all.reduce((n,m)=>n+(igN(m,k)||0),0),kp=(icon,k,label)=>'<div class="kpi">'+ic(icon,16)+'<span class="kv num">'+fmtK(sum(k))+'</span><span class="meta">'+label+'</span></div>';
-  let h=head+'<span class="row">'+(ig.busy?'<span class="meta">'+(ig.left>1?'Loading numbers for older posts… about '+ig.left+' left':'Updating…')+'</span>':'<span class="meta">Updated '+esc(ago(st.syncedAt))+'</span><button class="btn sm" data-act="igsync">Refresh</button>')+
+  list.sort(key?((a,b)=>(igN(idx[b],key)||0)-(igN(idx[a],key)||0)):((a,b)=>(idx[b].ts||0)-(idx[a].ts||0)));
+  const sum=k=>ids.reduce((n,id)=>n+(igN(idx[id],k)||0),0),kp=(icon,k,label)=>'<div class="kpi">'+ic(icon,16)+'<span class="kv num">'+fmtK(sum(k))+'</span><span class="meta">'+label+'</span></div>';
+  let h=head+'<span class="row">'+(ig.busy?'<span class="meta">'+(pend>0?'Loading numbers… '+(ids.length-pend)+' of '+ids.length+' posts done':'Updating…')+'</span>':'<span class="meta">Updated '+esc(ago(st.syncedAt))+'</span><button class="btn sm" data-act="igsync">Refresh</button>')+
     (st.manage?(armedDelete==='igoff'?'<button class="btn sm danger" data-act="igoff">Disconnect?</button>':'<button class="btn sm" data-act="igoff">Disconnect</button>'):'')+'</span></div>'+
-    '<div class="row igacct">'+(safeUrl(st.pic)?'<img class="avatar" src="'+esc(st.pic)+'" alt="" referrerpolicy="no-referrer">':'')+'<span><b>@'+esc(st.username||'instagram')+'</b><span class="meta" style="display:block">'+fmtK(st.followers||0)+' followers · '+all.length+(all.length===1?' post':' posts')+' loaded</span></span></div>'+
-    (ig.err?'<p class="err">'+esc(ig.err)+'</p>':'');
-  if(!all.length)return box(h+'<p class="meta">'+(ig.busy||ig.media===null?'Loading this account’s posts…':'No posts were found on this account.')+'</p>');
+    '<div class="row igacct">'+(safeUrl(st.pic)?'<img class="avatar" src="'+esc(st.pic)+'" alt="" referrerpolicy="no-referrer">':'')+'<span><b>@'+esc(st.username||'instagram')+'</b><span class="meta" style="display:block">'+fmtK(st.followers||0)+' followers · '+ids.length+(ids.length===1?' post':' posts')+' loaded</span></span></div>'+
+    (ig.err?'<p class="err">'+esc(ig.err)+'</p>':'')+(ig.note&&!ig.busy?'<p class="meta" style="color:var(--warn)">'+esc(ig.note)+'</p>':'');
+  if(!ids.length)return box(h+'<p class="meta">'+(ig.busy||ig.idx===null?'Loading this account’s posts…':'No posts were found on this account.')+'</p>');
   h+='<div class="igkpis">'+kp('video','views','Views')+kp('heart','likes','Likes')+kp('msg','comments','Comments')+kp('share','shares','Shares')+kp('folder','saves','Saves')+'</div>'+
-    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content</span><span class="row"><select class="field" id="igType" aria-label="Type">'+types.map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
+    (pend>0?'<p class="meta">Totals grow while numbers for older posts are still loading'+(ig.busy?'.':'. Press Refresh to continue.')+'</p>':'')+
+    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content</span><span class="row"><select class="field" id="igType" aria-label="Type">'+[['all','All'],['REELS','Reels'],['FEED','Posts']].map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
     '<div class="table"><div class="trow th igrow"><span>POST</span><span>VIEWS</span><span>REACH</span><span>LIKES</span><span>COMMENTS</span><span>SHARES</span><span>SAVES</span></div>';
-  const cell=(m,k)=>{const n=igN(m,k);return '<span class="num" data-l="'+k+'">'+(n==null?'—':fmtK(n))+'</span>'};
-  list.slice(0,igShow).forEach(m=>{const d=m.at?new Date(m.at):null;
-    h+='<a class="trow igrow" href="'+esc(safeUrl(m.url)||'#')+'" target="_blank" rel="noopener"><span class="igpost"><span class="igthumb">'+(safeUrl(m.thumb)?'<img src="'+esc(m.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':ic('video',16))+'</span><span style="min-width:0"><b class="igcap">'+esc((m.caption||'').split('\n')[0]||'No caption')+'</b><span class="meta" style="display:block">'+igKind(m)+(d&&!isNaN(d)?' · '+dayOf(d.getTime()):'')+'</span></span></span>'+cell(m,'views')+cell(m,'reach')+cell(m,'likes')+cell(m,'comments')+cell(m,'shares')+cell(m,'saves')+'</a>'});
-  h+='</div>'+(list.length>igShow?'<button class="btn wide" data-act="igmore">Show more ('+(list.length-igShow)+' left)</button>':'')+'<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Numbers can be up to 48 hours behind Instagram.</p>';
+  const cell=(e,k)=>{const n=igN(e,k);return '<span class="num" data-l="'+k+'">'+(n==null?(e.a||k==='likes'||k==='comments'?'—':'…'):fmtK(n))+'</span>'};
+  list.slice(0,igShow).forEach(id=>{const e=idx[id],m=ig.items[id];if(!m)igPage(e.p||0);
+    const kind=e.k==='R'?'Reel':e.k==='S'?'Story':m&&m.kind==='CAROUSEL_ALBUM'?'Carousel':m&&m.kind==='VIDEO'?'Video':'Post';
+    h+='<a class="trow igrow" href="'+esc((m&&safeUrl(m.url))||'#')+'" target="_blank" rel="noopener"><span class="igpost"><span class="igthumb">'+(m&&safeUrl(m.thumb)?'<img src="'+esc(m.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':ic('video',16))+'</span><span style="min-width:0"><b class="igcap">'+esc(m?((m.caption||'').split('\n')[0]||'No caption'):'Loading…')+'</b><span class="meta" style="display:block">'+kind+(e.ts?' · '+dayOf(e.ts*1000):'')+'</span></span></span>'+cell(e,'views')+cell(e,'reach')+cell(e,'likes')+cell(e,'comments')+cell(e,'shares')+cell(e,'saves')+'</a>'});
+  h+='</div>'+(list.length>igShow?'<button class="btn wide" data-act="igmore">Show more ('+(list.length-igShow)+' left)</button>':'')+'<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Three dots mean the number is still loading. Numbers can be up to 48 hours behind Instagram.</p>';
   return box(h);
 }
 /* ---------- Inspiration ---------- */
