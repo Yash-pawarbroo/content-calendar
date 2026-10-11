@@ -5,7 +5,8 @@
   window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   // A client's private link ends in #c=<their key>: remember it and tidy the address.
-  try{var hm=/^#c=(l_[0-9a-f]{20,80})$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}}catch(e){}
+  try{var hm=/^#c=(l_[0-9a-z_]{20,90})$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}}catch(e){}
+  try{var jm=/^#join=(j_[0-9a-z_]{10,60})$/.exec(location.hash);if(jm)window.CSC.join=jm[1]}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign(KEY?{'x-upload-key':KEY}:{},opt.headers||{});
     return fetch(BASE+path,opt).then(function(r){return r.json().then(function(j){if(!r.ok){var e=new Error(j.error||'Something went wrong.');e.status=r.status;e.code=r.status===401?'auth':'unavailable';throw e}return j})})}
@@ -24,6 +25,9 @@
   window.CSC.signup=function(o){return post('/api/signup',o).then(keep)};
   window.CSC.links=function(){return api('/api/links').then(function(j){return j.links})};
   window.CSC.link=function(ws,renew){return api('/api/link',{method:'POST',body:JSON.stringify({ws:ws,renew:!!renew})}).then(function(j){return j.token})};
+  window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
+  window.CSC.teams=function(){return api('/api/teams')};
+  window.CSC.joinInfo=function(code){return fetch(BASE+'/api/join-info?code='+encodeURIComponent(code)).then(function(r){return r.ok?r.json():null},function(){return null})};
   window.CSC.users=function(){return api('/api/users').then(function(j){return j.users})};
   window.CSC.userUpdate=function(o){return api('/api/user-update',{method:'POST',body:JSON.stringify(o)})};
   var nodb={collection:function(){return {onSnapshot:function(cb){setTimeout(function(){cb({docs:[]})},0);return function(){}}}},
@@ -422,6 +426,7 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .rolepick button span{color:var(--muted,#6b6459);font-size:.8rem}
 .rolepick button.on{border-color:var(--ink);background:var(--soft)}
 .pwrow{display:flex;gap:8px;align-items:center}
+.trow.agrow{grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) 110px 120px !important;cursor:default}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authlink{align-self:center;border:0;background:none;font:inherit;font-size:.84rem;color:var(--muted,#6b6459);text-decoration:underline;cursor:pointer;padding:4px}
@@ -498,7 +503,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={};
+let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -891,21 +896,25 @@ function vAdmin(){
   const pend=people.filter(u=>!u.ok).length;
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People</span><span class="meta">'+(CSC?people.length+(people.length===1?' account':' accounts')+(pend?' · '+pend+' waiting for approval':''):'')+'</span></div>';
   if(CSC){
-    h+='<p class="meta">Editors sign up and wait here until you approve them and choose their client. Clients don’t need an account: send each one their private link from Clients, below.</p>';
+    h+='<p class="meta">Editors join with your invite link and wait here until you approve them and choose their client. Clients don’t need an account: send each one their private link from Clients, below.</p>';
     if(!peopleLoaded)h+='<p class="meta">Loading people…</p>';
-    else if(!people.length)h+='<p class="meta">No editors have signed up yet.</p>';
+    else if(!people.some(u=>u.role!=='owner'))h+='<p class="meta">No editors have joined yet.</p>';
     else{h+='<div class="table"><div class="trow th acrow pprow"><span>NAME</span><span>ROLE</span><span>CLIENT</span><span>EMAIL</span><span></span></div>';
       people.slice().sort((a,b)=>(a.ok-b.ok)||(b.createdAt-a.createdAt)).forEach(u=>{const w=wsOf(u.ws),ed=u.role==='editor';
-        h+='<div class="trow acrow pprow"><span class="t1">'+esc(u.name)+'</span><span><span class="badge'+(u.ok?(ed?' blue':''):' warn')+'">'+(u.ok?(ed?'Editor':'Client'):'Waiting')+'</span></span>'+
-          '<span class="meta">'+(ed?'<select class="field pplWs" data-id="'+esc(u.id)+'" aria-label="Clients '+esc(u.name)+' can work on"><option value="">All clients</option>'+workspaces.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===u.ws?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>':esc(w?w.name:''))+'</span>'+
+        h+='<div class="trow acrow pprow"><span class="t1">'+esc(u.name)+'</span><span><span class="badge'+(u.ok?(ed?' blue':''):' warn')+'">'+(u.ok?(u.role==='owner'?'Admin':ed?'Editor':'Client'):'Waiting')+'</span></span>'+
+          '<span class="meta">'+(ed?'<select class="field pplWs" data-id="'+esc(u.id)+'" aria-label="Clients '+esc(u.name)+' can work on"><option value="">All clients</option>'+workspaces.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===u.ws?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>':u.role==='owner'?'All clients':esc(w?w.name:''))+'</span>'+
           '<span class="meta" style="overflow-wrap:anywhere">'+esc(u.email)+'</span><span class="row" style="justify-content:flex-end;flex-wrap:nowrap">'+
-          (u.ok?'':'<button class="btn sm dark" data-act="pplok" data-id="'+esc(u.id)+'">Approve</button>')+'<button class="btn sm" data-act="pplpw" data-id="'+esc(u.id)+'">Reset password</button>'+
-          (armedDelete==='pp:'+u.id?'<button class="btn sm danger" data-act="pplrm" data-id="'+esc(u.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="pplrm" data-id="'+esc(u.id)+'" aria-label="Remove '+esc(u.name)+'">'+ic('trash',14)+'</button>')+'</span></div>'});
+          (u.role==='owner'?'':(u.ok?'':'<button class="btn sm dark" data-act="pplok" data-id="'+esc(u.id)+'">Approve</button>')+'<button class="btn sm" data-act="pplpw" data-id="'+esc(u.id)+'">Reset password</button>'+
+          (armedDelete==='pp:'+u.id?'<button class="btn sm danger" data-act="pplrm" data-id="'+esc(u.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="pplrm" data-id="'+esc(u.id)+'" aria-label="Remove '+esc(u.name)+'">'+ic('trash',14)+'</button>'))+'</span></div>'});
       h+='</div>'}
-    h+='<p class="err" id="pplErr" hidden></p><p class="meta">Share this address with them: <b style="color:var(--ink)">'+esc(location.origin)+'</b></p>';
+    h+='<p class="err" id="pplErr" hidden></p><div class="frow" style="padding-top:8px;border-top:1px solid var(--line)"><span class="grow meta">To add an editor, send them your team’s invite link. They sign up from it and then wait here for your approval.</span><button class="btn sm dark" data-act="cpjoin">'+ic('link',14)+'Copy editor invite link</button>'+(armedDelete==='jn'?'<button class="btn sm danger" data-act="newjoin">Replace link?</button>':'<button class="btn sm" data-act="newjoin">New link</button>')+'</div>';
   }else h+='<p class="meta">In this version people are added with the Share button at the top of the page. Sign-up and log-in are available in the hosted version.</p>';
   h+='</section>';
   const vs=videos.slice().sort((a,b)=>videoBytes(b)-videoBytes(a)),tot=vs.reduce((n,v)=>n+videoBytes(v),0);
+  if(CSC&&CSC.me&&CSC.me.site&&agencies){h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Agencies on this site</span><span class="meta">'+agencies.teams.length+(agencies.teams.length===1?' agency':' agencies')+' · all share the same storage</span></div>';
+    if(!agencies.teams.length)h+='<p class="meta">No other agency has created a workspace yet. Only you see this list.</p>';
+    else{h+='<div class="table"><div class="trow th agrow"><span>AGENCY</span><span>ADMIN EMAIL</span><span>JOINED</span><span>STORAGE USED</span></div>';agencies.teams.slice().sort((a,b)=>b.createdAt-a.createdAt).forEach(t=>{h+='<div class="trow agrow"><span class="t1">'+esc(t.name)+'</span><span class="meta" style="overflow-wrap:anywhere">'+esc(t.email)+'</span><span class="meta">'+(t.createdAt?new Date(t.createdAt).toLocaleDateString():'')+'</span><span class="meta num">'+(fmtSize(t.bytes)||'0 KB')+'</span></div>'});h+='</div><p class="meta">You can’t open another agency’s videos. Only you see this list.</p>'}
+    h+='</section>'}
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Videos and storage</span><span class="meta">'+vs.length+(vs.length===1?' video':' videos')+(tot?' · '+fmtSize(tot)+' in uploaded files':'')+(usage&&usage.maxBytes?' · '+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used':'')+'</span></div>';
   if(!vs.length)h+='<p class="meta">No videos yet.</p>';
   else{h+='<div class="table"><div class="trow th advrow"><span>VIDEO</span><span>CLIENT</span><span>STAGE</span><span>FILES</span><span></span></div>';
@@ -929,22 +938,25 @@ function authWrap(title,sub,inner){
     '<div class="authform"><h2 class="ptitle">'+title+'</h2><p class="meta" style="margin:-4px 0 6px">'+sub+'</p>'+inner+'</div></div>';
 }
 function vSignIn(){
-  const up=authMode==='signup';
-  return authWrap(up?'Join as an editor':'Welcome back',up?'Create your editor account.':'Log in to your team workspace.',
-    '<div class="seg"><button type="button" class="'+(up?'':'on')+'" data-act="authmode" data-arg="login" aria-pressed="'+(!up)+'">Log in</button><button type="button" class="'+(up?'on':'')+'" data-act="authmode" data-arg="signup" aria-pressed="'+up+'">Editor sign up</button></div>'+
-    (up?'<div><label class="meta" for="authName">Your name</label><input id="authName" class="field" maxlength="40" autocomplete="name" value="'+esc(authV.name||'')+'"></div>':'')+
+  const up=authMode==='signup',jn=!!(CSC&&CSC.join);
+  if(jn&&joinBad)return authWrap('This invite link has expired','Ask your team for a new invite link.','<button type="button" class="btn dark wide" data-act="nojoin">Go to log in</button>');
+  return authWrap(up?(jn?'Join '+esc(joinName||'your team'):'Create your workspace'):'Welcome back',up?(jn?'Create your editor account.':'For agencies and editing teams. It takes a minute.'):'Log in to your team workspace.',
+    '<div class="seg"><button type="button" class="'+(up?'':'on')+'" data-act="authmode" data-arg="login" aria-pressed="'+(!up)+'">Log in</button><button type="button" class="'+(up?'on':'')+'" data-act="authmode" data-arg="signup" aria-pressed="'+up+'">'+(jn?'Join as editor':'Create a workspace')+'</button></div>'+
+    (up?'<div class="'+(jn?'':'two')+'"><div><label class="meta" for="authName">Your name</label><input id="authName" class="field" maxlength="40" autocomplete="name" value="'+esc(authV.name||'')+'"></div>'+
+      (jn?'':'<div><label class="meta" for="authBrand">Team or agency name</label><input id="authBrand" class="field" maxlength="40" autocomplete="organization" value="'+esc(authV.brand||'')+'"></div>')+'</div>':'')+
     '<div><label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com" value="'+esc(authV.email||'')+'"></div>'+
     '<div><label class="meta" for="authPw">Password</label><div class="pwrow"><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'"'+(up?' placeholder="At least 6 characters"':'')+'><button type="button" class="btn sm" data-act="showpw" aria-label="Show or hide the password">Show</button></div></div>'+
-    '<p class="err" id="authErr" hidden></p><button class="btn dark wide" data-act="authgo">'+(up?'Create account':'Log in')+'</button>'+
-    '<p class="meta">'+(up?'The admin approves your account and chooses the clients you work on.':'Forgot your password? Ask the admin to reset it.')+'</p>'+
+    '<p class="err" id="authErr" hidden></p><button class="btn dark wide" data-act="authgo">'+(up?(jn?'Join team':'Create workspace'):'Log in')+'</button>'+
+    '<p class="meta">'+(up?(jn?'Your team’s admin approves your account and chooses the clients you work on.':'You become the admin of your own workspace: add clients, invite editors, and keep every video in one place.'):'Forgot your password? Ask your team’s admin to reset it.')+'</p>'+
     '<div class="clientnote">'+ic('user',16)+'<span><b>Are you a client?</b> You don’t need an account. Open the private link your team sent you.</span></div>'+
-    '<button type="button" class="authlink" data-act="nav" data-view="admin">Admin sign in</button>');
+    (jn?'':'<div class="clientnote">'+ic('video',16)+'<span><b>Are you an editor?</b> Ask your team for their invite link, then sign up from it.</span></div>')+
+    '<button type="button" class="authlink" data-act="nav" data-view="admin">Site owner sign in</button>');
 }
 function vPending(){
   return authWrap('Waiting for approval','Thanks, '+esc(CSC.me.name||'there')+'. Your editor account is created.','<p class="meta">You can start as soon as the admin approves it.</p><button class="btn dark wide" data-act="recheck">Check again</button><button type="button" class="authlink" data-act="signout">Use a different account</button>');
 }
 function vAdminIn(){
-  return authWrap('Admin','Manage people, clients and storage.','<div><label class="meta" for="adminPw">Admin password</label><input id="adminPw" class="field" type="password" autocomplete="off"></div><p class="err" id="adminErr" hidden></p><button class="btn dark wide" data-act="adminin">Sign in</button><button type="button" class="authlink" data-act="nav" data-view="videos">Back to log in</button>');
+  return authWrap('Site owner','Sign in with the site password.','<div><label class="meta" for="adminPw">Site password</label><input id="adminPw" class="field" type="password" autocomplete="off"></div><p class="err" id="adminErr" hidden></p><button class="btn dark wide" data-act="adminin">Sign in</button><button type="button" class="authlink" data-act="nav" data-view="videos">Back to log in</button>');
 }
 function clientUrl(t){return location.origin+location.pathname+'#c='+t}
 async function copyLink(id,renew){
@@ -954,7 +966,13 @@ async function copyLink(id,renew){
   if(ok)notice((renew?'New link created and copied. The old link no longer works. ':'Client link copied. ')+'Send it to the client.');else prompt('Copy this link and send it to the client',u);
   lastHtml='';renderAll();
 }
-function loadPeople(){if(!(CSC&&CSC.users&&isAdmin()))return;if(CSC.links)CSC.links().then(l=>{wsLinks=l||{};if(view==='admin')renderAll()},()=>{});CSC.users().then(u=>{people=u;peopleLoaded=true;if(view==='admin')renderAll()},()=>{})}
+async function copyJoin(renew){
+  if(renew||!teamInfo){try{teamInfo=await CSC.team(renew)}catch(e){return fail(e)}}
+  const u=location.origin+location.pathname+'#join='+teamInfo.join;let ok=false;try{await navigator.clipboard.writeText(u);ok=true}catch(e){}
+  if(ok)notice((renew?'New invite link created and copied. The old one no longer works. ':'Editor invite link copied. ')+'Send it to your editor.');else prompt('Copy this link and send it to your editor',u);
+  lastHtml='';renderAll();
+}
+function loadPeople(){if(!(CSC&&CSC.users&&isAdmin()))return;if(CSC.team&&!teamInfo)CSC.team().then(t=>{teamInfo=t},()=>{});if(CSC.me.site&&CSC.teams)CSC.teams().then(a=>{agencies=a;if(view==='admin')renderAll()},()=>{});if(CSC.links)CSC.links().then(l=>{wsLinks=l||{};if(view==='admin')renderAll()},()=>{});CSC.users().then(u=>{people=u;peopleLoaded=true;if(view==='admin')renderAll()},()=>{})}
 function pplErr(e){const p=$('#pplErr');if(p){p.textContent=(e&&e.message)||'That did not work. Try again.';p.hidden=false}}
 function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
@@ -1122,7 +1140,7 @@ document.addEventListener('click',async ev=>{
   const pk=ev.target.closest('[data-pick]');if(pk){const i=document.getElementById(pk.dataset.pick);if(i)i.click();return}
   const b=ev.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,id=b.dataset.id,v=id?videos.find(x=>x.id===id):null;
-  if(!['delete','delver','rmaccess','delws','newlink','pplrm'].includes(act)&&armedDelete)armedDelete=null;
+  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin'].includes(act)&&armedDelete)armedDelete=null;
   if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
   else if(act==='stage'){curStage=b.dataset.stage;go('videos')}
   else if(act==='ws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);curStage='all';go('videos')}
@@ -1159,11 +1177,15 @@ document.addEventListener('click',async ev=>{
     const e=$('#authErr'),email=val('authEmail'),pw=($('#authPw')||{}).value||'',say=m=>{b.disabled=false;e.textContent=m;e.hidden=false};
     if(!email||!pw)return say('Enter your email and password.');
     if(authMode==='signup'&&!val('authName'))return say('Enter your name.');
+    if(authMode==='signup'&&!CSC.join&&!val('authBrand'))return say('Enter your team or agency name.');
     b.disabled=true;e.hidden=true;
-    try{if(authMode==='signup')await CSC.signup({name:val('authName'),brand:val('authBrand'),email,password:pw,role:authRole});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
+    try{if(authMode==='signup')await CSC.signup(CSC.join?{name:val('authName'),email,password:pw,join:CSC.join}:{name:val('authName'),team:val('authBrand'),email,password:pw});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
   }
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
+  else if(act==='cpjoin')await copyJoin(false);
+  else if(act==='newjoin'){if(armedDelete!=='jn'){armedDelete='jn';renderAll();return}armedDelete=null;await copyJoin(true)}
+  else if(act==='nojoin'){location.hash='';location.reload()}
   else if(act==='newlink'){if(armedDelete!=='ln:'+id){armedDelete='ln:'+id;renderAll();return}armedDelete=null;await copyLink(id,true)}
   else if(act==='showpw'){const p=$('#authPw');p.type=p.type==='password'?'text':'password';b.textContent=p.type==='password'?'Show':'Hide'}
   else if(act==='pplok'){b.disabled=true;try{await CSC.userUpdate({id,ok:true})}catch(x){pplErr(x)}loadPeople()}
@@ -1317,6 +1339,7 @@ readHash();if(!role)role='owner';renderAll();
   if(!db){wsLoaded=vidLoaded=true;notice('Saving is not available in this view, so changes stay on this screen only. Sign in to Claude to save and share them.');renderAll();return}
   renderAll();refreshUsage();
   const onErr=()=>notice('The live connection stopped. Reload the page to reconnect.');
+  if(CSC&&CSC.join&&!CSC.me){authMode='signup';CSC.joinInfo(CSC.join).then(j=>{joinName=j?j.name:'';joinBad=!j;renderAll()})}
   loadPeople();setInterval(()=>{if(view==='admin'&&!document.hidden)loadPeople()},20000);
   db.collection('workspaces').onSnapshot(s=>{workspaces=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));wsLoaded=true;renderAll()},onErr);
   if(CSC&&isAdmin())db.collection('access').onSnapshot(s=>{access=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));renderAll()},()=>{});
