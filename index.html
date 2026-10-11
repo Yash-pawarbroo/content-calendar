@@ -2,25 +2,22 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script>window.CSC_API="https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev";</script><script>// Runs the calendar on Cloudflare: same app, with data and files kept in the R2 bucket.
 (function(){
   var BASE=String(window.CSC_API||'').replace(/\/+$/,'');
-  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,adminSignIn:function(code){return fetch(BASE+'/api/check',{headers:{'x-upload-key':code}}).then(function(r){return r.ok?r.json():null}).then(function(me){if(me&&me.role==='owner'){try{localStorage.setItem('csc.pass',code)}catch(e){}location.reload();return true}return false}).catch(function(){return false})},signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
+  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign({'x-upload-key':KEY},opt.headers||{});
     return fetch(BASE+path,opt).then(function(r){return r.json().then(function(j){if(!r.ok){var e=new Error(j.error||'Something went wrong.');e.status=r.status;e.code=r.status===401?'auth':'unavailable';throw e}return j})})}
-  function gate(msg){
-    return new Promise(function(done){
-      var w=document.createElement('div');w.setAttribute('style','position:fixed;inset:0;z-index:99;background:#f1ece2;display:grid;place-items:center;padding:16px;font:15px/1.5 system-ui,sans-serif;color:#1f1c19');
-      w.innerHTML='<form style="background:#fbf9f5;border:1px solid #e6dfd3;border-radius:20px;padding:28px;width:min(400px,100%);display:flex;flex-direction:column;gap:14px"><div style="font-size:1.5rem;font-weight:500;letter-spacing:-.03em">Content Scheduling Calendar</div><div style="color:#6b655d">Enter your access code to continue.</div><input type="password" aria-label="Access code" placeholder="Access code" autocomplete="off" style="height:42px;border:1px solid #e6dfd3;border-radius:10px;padding:0 12px;font:inherit"><div class="m" style="color:#c0271f"></div><button style="height:42px;border:0;border-radius:10px;background:#1f1c19;color:#fff;font:inherit;font-weight:600;cursor:pointer">Continue</button></form>';
-      w.querySelector('.m').textContent=msg||'';
-      w.querySelector('form').onsubmit=function(e){e.preventDefault();KEY=w.querySelector('input').value.trim();if(!KEY)return;
-        api('/api/check').then(function(me){window.CSC.me=me;try{localStorage.setItem('csc.pass',KEY)}catch(x){}w.remove();done()},function(x){w.querySelector('.m').textContent=x.status===401?'That code is not recognised.':x.message})};
-      (document.body||document.documentElement).appendChild(w);w.querySelector('input').focus();
-    });
-  }
+  // No blocking screen: the app opens signed out, and people sign in from the page itself.
   var ready=new Promise(function(res){
-    function start(){(KEY?api('/api/check'):Promise.reject({status:401})).then(function(me){window.CSC.me=me;res()},function(e){gate(e.status===401?'':(e.message||'')).then(res)})}
-    if(document.body)start();else document.addEventListener('DOMContentLoaded',start);
+    if(!KEY)return res();
+    api('/api/check').then(function(me){window.CSC.me=me;res()},function(e){if(e.status===401){KEY='';try{localStorage.removeItem('csc.pass')}catch(x){}}res()});
   });
+  function trySign(code,adminOnly){return fetch(BASE+'/api/check',{headers:{'x-upload-key':code}}).then(function(r){return r.ok?r.json():null}).then(function(me){
+    if(me&&(!adminOnly||me.role==='owner')){try{localStorage.setItem('csc.pass',code)}catch(e){}location.reload();return true}return false}).catch(function(){return false})}
+  window.CSC.signIn=function(code){return trySign(code,false)};
+  window.CSC.adminSignIn=function(code){return trySign(code,true)};
+  var nodb={collection:function(){return {onSnapshot:function(cb){setTimeout(function(){cb({docs:[]})},0);return function(){}}}},
+    doc:function(){return {set:function(){return Promise.reject({code:'invalid_argument'})},delete:function(){return Promise.reject({code:'invalid_argument'})},onSnapshot:function(cb){setTimeout(function(){cb({exists:false,data:function(){}})},0);return function(){}}}}};
 
   var cache={},seen={},subs={};
   function fire(c){(subs[c]||[]).forEach(function(f){try{f()}catch(e){}})}
@@ -53,7 +50,7 @@
   var user={can:function(){return Promise.resolve(true)},isOwner:function(){return Promise.resolve(true)},canEdit:function(){return Promise.resolve(true)},id:function(){return Promise.resolve(null)},
     me:function(){var m=window.CSC.me||{};return Promise.resolve({id:null,name:m.name||'',avatarUrl:'',email:null,isOwner:m.role==='owner',canEdit:true})}};
   var caps={db:db,assets:assets,downloads:downloads,user:user};
-  window.claude={use:function(n){return ready.then(function(){return caps[n]||null})}};
+  window.claude={use:function(n){return ready.then(function(){if(!window.CSC.me)return n==='db'?nodb:n==='user'?{can:function(){return Promise.resolve(false)},me:user.me}:null;return caps[n]||null})}};
 })();
 </script>
 <style>
@@ -349,6 +346,9 @@ div.trow.acrow{cursor:default}
 .adminin{max-width:340px}
 .adminin .field{width:100%}
 @media (max-width:860px){.sidebot{margin-top:0;padding-top:0;border-top:0}}
+.advrow{grid-template-columns:minmax(0,2fr) minmax(0,1.1fr) 110px minmax(0,1.3fr) auto !important}
+div.trow.advrow{cursor:default}
+@media (max-width:860px){.trow.advrow{grid-template-columns:minmax(0,1fr) auto !important}.trow.advrow>:nth-child(5){display:flex !important}.trow.advrow>:nth-child(2){display:none}}
 </style>
 
 <div class="app">
@@ -441,7 +441,7 @@ function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){
 function fileBase(v){return (v.title||'video').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,60)||'video'}
 function isOwner(){return canWrite&&role==='owner'}
 function isEditor(){return canWrite&&role==='editor'}
-function who(){return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
+function who(){if(CSC&&!CSC.me)return 'Guest';return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
 function isAdmin(){return CSC?!!(CSC.me&&CSC.me.role==='owner'):isOwner()}
 function roleLabel(){return CSC&&CSC.me?({owner:'Admin',editor:'Editor',client:'Client'}[CSC.me.role]||'Member'):(role==='owner'?'Owner':'Editor')}
 function hasLegacy(v){return okAsset(v.rawAsset)||!!safeUrl(v.rawUrl)}
@@ -560,7 +560,7 @@ function renderTop(){
   $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Clients',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
-  if(CSC){$('#roleSel').hidden=true;const rt=$('#roleTxt');rt.hidden=false;rt.textContent=roleLabel();$('#signOut').hidden=false}
+  if(CSC){$('#roleSel').hidden=true;const rt=$('#roleTxt');rt.hidden=false;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me}
 }
 
 /* ---------- views ---------- */
@@ -795,6 +795,15 @@ function vAdmin(){
       '<select id="acWs" class="field" aria-label="Client"><option value="">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')+'</select><button class="btn dark" data-act="addaccess">'+ic('plus')+'Create access code</button></div><p class="err" id="acErr" hidden></p>'+
       '<p class="meta">Share this address with them: <b style="color:var(--ink)">'+esc(location.origin)+'</b></p>';
   }else h+='<p class="meta">In this version people are added with the Share button at the top of the page. Individual access codes for editors and clients are available in the hosted version.</p>';
+  h+='</section>';
+  const vs=videos.slice().sort((a,b)=>videoBytes(b)-videoBytes(a)),tot=vs.reduce((n,v)=>n+videoBytes(v),0);
+  h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Videos and storage</span><span class="meta">'+vs.length+(vs.length===1?' video':' videos')+(tot?' · '+fmtSize(tot)+' in uploaded files':'')+(usage&&usage.maxBytes?' · '+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used':'')+'</span></div>';
+  if(!vs.length)h+='<p class="meta">No videos yet.</p>';
+  else{h+='<div class="table"><div class="trow th advrow"><span>VIDEO</span><span>CLIENT</span><span>STAGE</span><span>FILES</span><span></span></div>';
+    vs.forEach(v=>{const w=wsOf(v.ws),n=materials(v).length+(hasEdit(v)?1:0)+(v.edits||[]).length,by=videoBytes(v);
+      h+='<div class="trow advrow"><span class="t1">'+esc(v.title)+'</span><span class="meta">'+esc(w?w.name:'')+'</span><span>'+stageBadge(v)+'</span><span class="meta num">'+n+(n===1?' file':' files')+(by?' · '+fmtSize(by):'')+'</span><span class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm" data-act="open" data-id="'+esc(v.id)+'">Open</button>'+
+        (armedDelete===v.id?'<button class="btn sm danger" data-act="delete" data-id="'+esc(v.id)+'">Delete?</button>':'<button class="btn sm sq" data-act="delete" data-id="'+esc(v.id)+'" aria-label="Delete '+esc(v.title)+'">'+ic('trash',14)+'</button>')+'</span></div>'});
+    h+='</div><p class="meta">Deleting a video removes its uploaded files and frees the space.</p>'}
   h+='</section><section class="card"><div class="chead"><span class="ctitle">Clients</span><button class="btn sm dark" data-act="new-ws">'+ic('plus',14)+'New client</button></div>';
   if(!workspaces.length)h+='<p class="meta">No clients yet.</p>';
   workspaces.forEach(w=>{const n=videos.filter(v=>v.ws===w.id).length;
@@ -802,6 +811,10 @@ function vAdmin(){
       (n?'':(armedDelete==='ws:'+w.id?'<button class="btn sm danger" data-act="delws" data-id="'+esc(w.id)+'">Delete?</button>':'<button class="btn sm sq" data-act="delws" data-id="'+esc(w.id)+'" aria-label="Delete client '+esc(w.name)+'">'+ic('trash',14)+'</button>'))+'</div>'});
   return h+'</section>';
 }
+function vSignIn(){
+  return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Sign in</h2><section class="card" style="margin-top:18px"><label class="meta" for="accPw">Access code</label><input id="accPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="accin">Continue</button><p class="err" id="accErr" hidden></p></section><p class="meta" style="margin-top:12px">Editors and clients sign in with the code their admin gave them. Admins sign in from Admin, at the bottom of the menu.</p></div>';
+}
+function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
   return '<div class="pagehead"><h2 class="ptitle">Settings</h2></div><div class="grid2"><section class="card"><span class="ctitle">Profile</span><label class="meta" for="edName">Name shown on uploads and notes</label><input id="edName" class="field" maxlength="40" placeholder="'+esc(profileName||'Your name')+'" value="'+esc(edName)+'">'+
     (CSC?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
@@ -814,6 +827,7 @@ function renderAll(){
   renderSide();renderTop();
   let html;
   if(db&&!(wsLoaded&&vidLoaded))html=emptyBox('video','Loading your workspace','Clients and videos will appear here.');
+  else if(CSC&&!CSC.me)html=view==='admin'?vAdmin():vSignIn();
   else if(!workspaces.length&&view!=='team'&&view!=='settings'&&view!=='admin')html=emptyBox('user','Start with your first client','Each client gets its own videos and calendar.',canWrite?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'');
   else html=({overview:vOverview,calendar:vCalendar,videos:vVideos,project:vProject,clients:vClients,analytics:vAnalytics,team:vTeam,settings:vSettings,admin:vAdmin}[view]||vVideos)();
   if(html!==lastHtml){
@@ -984,6 +998,11 @@ document.addEventListener('click',async ev=>{
     else if(k===1){/* nothing else to clear */}
     await patchVideo(id,patch);for(const a of gone)await dropAsset(a);refreshUsage();
   }
+  else if(act==='accin'){
+    const pw=val('accPw'),e=$('#accErr');if(!pw)return;b.disabled=true;
+    const ok=CSC&&CSC.signIn?await CSC.signIn(pw):false;
+    if(!ok){b.disabled=false;e.textContent='That code is not recognised.';e.hidden=false}
+  }
   else if(act==='adminin'){
     const pw=val('adminPw'),e=$('#adminErr');if(!pw)return;b.disabled=true;
     const ok=CSC&&CSC.adminSignIn?await CSC.adminSignIn(pw):false;
@@ -1060,7 +1079,7 @@ document.addEventListener('click',async ev=>{
     refreshUsage();
   }
   else if(act==='delete'){
-    if(armedDelete===id){armedDelete=null;go('videos');await delVideo(id);if(v){await dropAsset(v.rawAsset);await dropAsset(v.editedAsset);for(const f of (v.files||[]))await dropAsset(f.asset);for(const e of (v.edits||[]))await dropAsset(e.asset);refreshUsage()}}
+    if(armedDelete===id){armedDelete=null;if(view==='project')go('videos');await delVideo(id);if(v){await dropAsset(v.rawAsset);await dropAsset(v.editedAsset);for(const f of (v.files||[]))await dropAsset(f.asset);for(const e of (v.edits||[]))await dropAsset(e.asset);refreshUsage()}}
     else{armedDelete=id;renderAll()}
   }
   else if(act==='dl'&&v){
@@ -1092,7 +1111,7 @@ document.addEventListener('keydown',async e=>{
   e.preventDefault();z.classList.toggle('over',type==='dragover');
   if(type==='drop'&&e.dataTransfer&&e.dataTransfer.files.length){const [id,arg]=z.dataset.dz.split('|'),[k,vs]=arg.split(':');if(k==='edited')stageEdit(id,e.dataTransfer.files[0]);else await uploadFiles(id,k,+vs||1,e.dataTransfer.files)}
 }));
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='adminPw'){e.preventDefault();const b=document.querySelector('[data-act="adminin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
 $('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
 $('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDlg()});
@@ -1109,7 +1128,7 @@ readHash();if(!role)role='owner';renderAll();
       try{downloads=await c.use('downloads')}catch(e){downloads=null}
       const user=await c.use('user');
       if(user){
-        const w=await user.can('data.write');if(w===false){canWrite=false;notice('You have view-only access to this workspace.')}
+        const w=await user.can('data.write');if(w===false){canWrite=false;if(!CSC)notice('You have view-only access to this workspace.')}
         if(CSC&&CSC.me){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
         try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
           if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
