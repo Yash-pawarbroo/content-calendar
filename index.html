@@ -395,6 +395,12 @@ div.trow.advrow{cursor:default}
 .pv{position:relative;aspect-ratio:16/9;width:100%;border-radius:10px;overflow:hidden;background:#17140f;display:grid;place-items:center}
 .pv video,.pv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center;display:block;background:#17140f}
 .pv.tall{aspect-ratio:1/1}
+.thumbslot{display:grid;place-items:center;width:100%;height:100%;color:#b9b1a3}
+.thumbslot canvas{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
+.pvposter{position:absolute;inset:0;border:0;padding:0;background:#17140f;cursor:pointer}
+.pvposter .thumbslot canvas{position:absolute;inset:0;margin:auto;width:auto;height:auto;max-width:100%;max-height:100%}
+.pvplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:rgba(23,20,15,.72);color:#fff;display:grid;place-items:center;padding-left:3px;transition:transform .12s}
+.pvposter:hover .pvplay{transform:translate(-50%,-50%) scale(1.08)}
 .pv.bad video{display:none}
 .pv.nopic::after,.fullpv.nopic::after{content:'This browser can’t show the picture for this file (usually an iPhone HEVC video). The sound plays. Download it to watch, or open the site in Safari.';position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:min(250px,80%);color:#e9e2d5;font-size:.84rem;text-align:center;pointer-events:none}
 .fullpv{position:relative}
@@ -566,6 +572,35 @@ function approval(v){
 }
 
 /* ---------- storage ---------- */
+/* One still picture per video, made one at a time, so the page never holds many video decoders open at once. */
+const thumbCache=new Map(),thumbQ=[];let thumbBusy=false,thumbRaf=0;
+function queueThumb(id){if(thumbCache.has(id)||thumbQ.includes(id))return;thumbQ.push(id);nextThumb()}
+function nextThumb(){
+  if(thumbBusy||!thumbQ.length)return;thumbBusy=true;
+  const id=thumbQ.shift(),v=document.createElement('video');let done=false;
+  const fin=c=>{if(done)return;done=true;clearTimeout(tm);thumbCache.set(id,c);try{v.removeAttribute('src');v.load()}catch(e){}thumbBusy=false;paintThumbs();nextThumb()};
+  const tm=setTimeout(()=>fin(null),20000);
+  const grab=()=>{try{const w=v.videoWidth,h=v.videoHeight;if(!w||!h)return fin(null);const k=Math.min(1,640/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);c.getContext('2d').drawImage(v,0,0,c.width,c.height);fin(c)}catch(e){fin(null)}};
+  v.muted=true;v.playsInline=true;v.preload='auto';
+  v.addEventListener('loadeddata',()=>setTimeout(grab,250));
+  v.addEventListener('error',()=>fin(null));
+  v.src='/_blob/'+id+'#t=1';
+}
+function paintThumbs(){
+  document.querySelectorAll('[data-thumb]').forEach(el=>{
+    if(el.firstChild)return;const id=el.dataset.thumb;
+    if(!thumbCache.has(id))return queueThumb(id);
+    const c=thumbCache.get(id);
+    if(!c){el.innerHTML=ic('video',el.dataset.big?26:16);el.classList.add('nothumb');return}
+    const k=document.createElement('canvas');
+    if(el.dataset.big){k.width=c.width;k.height=c.height;k.getContext('2d').drawImage(c,0,0)}
+    else{const d=Math.min(c.width,c.height);k.width=k.height=Math.min(d,160);k.getContext('2d').drawImage(c,(c.width-d)/2,(c.height-d)/2,d,d,0,0,k.width,k.height)}
+    el.appendChild(k);
+    if(el.dataset.big){const p=el.closest('.pv');if(p)p.classList.toggle('tall',c.height>c.width)}
+  });
+}
+try{new MutationObserver(()=>{if(thumbRaf)return;thumbRaf=requestAnimationFrame(()=>{thumbRaf=0;paintThumbs()})}).observe(document.body,{childList:true,subtree:true})}catch(e){}
+function stopPreviews(){document.querySelectorAll('.pv>video').forEach(x=>{const p=x.closest('.pv'),b=p.querySelector('.pvposter');try{x.pause();x.removeAttribute('src');x.load()}catch(e){}x.remove();p.classList.remove('nopic','bad');if(b)b.hidden=false})}
 function notice(msg){const n=$('#notice');n.textContent=msg||'';n.hidden=!msg}
 function fail(e){if(e&&e.code==='invalid_argument'){canWrite=false;notice('You have view-only access to this workspace.');renderAll()}else notice('That change could not be saved. Please try again.')}
 async function putVideo(id,data){
@@ -712,7 +747,7 @@ function thumbs(v,list,arg){
   list.slice(0,list.length>3?2:3).forEach(({m})=>{
     const e=extOf(m.name);let inner=ic(m.url&&!okAsset(m.asset)?'link':'file',18);
     if(okAsset(m.asset)&&['png','jpg','jpeg','webp','gif'].includes(e))inner='<img src="/_blob/'+esc(m.asset)+'" alt="" loading="lazy">';
-    else if(okAsset(m.asset)&&VID.includes(e))inner='<video src="/_blob/'+esc(m.asset)+'#t=0.1" preload="metadata" muted playsinline></video>';
+    else if(okAsset(m.asset)&&VID.includes(e))inner='<span class="thumbslot" data-thumb="'+esc(m.asset)+'"></span>';
     h+='<button class="thumb" data-act="files" data-id="'+esc(v.id)+'" data-arg="'+arg+'" aria-label="View '+esc(m.name||'file')+'">'+inner+'</button>';
   });
   if(list.length>3)h+='<button class="thumb" data-act="files" data-id="'+esc(v.id)+'" data-arg="'+arg+'">+'+(list.length-2)+'</button>';
@@ -740,14 +775,14 @@ function srcTile(v,ver,kind){
 function thumbInner(m){
   const e=extOf(m.name);
   if(okAsset(m.asset)&&['png','jpg','jpeg','webp','gif'].includes(e))return '<img src="/_blob/'+esc(m.asset)+'" alt="" loading="lazy">';
-  if(okAsset(m.asset)&&VID.includes(e))return '<video src="/_blob/'+esc(m.asset)+'#t=0.1" preload="metadata" muted playsinline></video>';
+  if(okAsset(m.asset)&&VID.includes(e))return '<span class="thumbslot" data-thumb="'+esc(m.asset)+'"></span>';
   return ic(m.url&&!okAsset(m.asset)?'link':'file',16);
 }
 function mediaKind(m){const e=extOf(m.name);return !okAsset(m.asset)?'':VID.includes(e)?'video':['png','jpg','jpeg','webp','gif'].includes(e)?'image':''}
 function bigPreview(v,x,count){
   const m=x.m,k=mediaKind(m),id=esc(v.id);
   let inner;
-  if(k==='video')inner='<video src="/_blob/'+esc(m.asset)+'#t=1" preload="metadata" controls playsinline></video>';
+  if(k==='video')inner='<button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(m.asset)+'" aria-label="Play '+esc(m.name||'video')+'"><span class="thumbslot" data-thumb="'+esc(m.asset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button>';
   else if(k==='image')inner='<img src="/_blob/'+esc(m.asset)+'" alt="'+esc(m.name||'')+'" loading="lazy">';
   else inner='<span class="pvnone">'+ic(safeUrl(m.url)&&!okAsset(m.asset)?'link':'file',26)+'<span>'+esc(m.name||(m.url?hostOf(m.url):'File'))+'</span></span>';
   return '<div class="pv">'+inner+(count>1?'<span class="pvcount">'+count+' files</span>':'')+(k?'<button class="pvfull" data-act="view" data-id="'+id+'" data-arg="'+x.i+'" aria-label="Full view" title="Full view">'+ic('full',16)+'</button>':'')+'</div>';
@@ -1195,6 +1230,7 @@ document.addEventListener('click',async ev=>{
     b.disabled=true;e.hidden=true;
     try{if(authMode==='signup')await CSC.signup(CSC.join?{email,password:pw,join:CSC.join}:{email,password:pw});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
   }
+  else if(act==='playpv'){stopPreviews();const pv=b.closest('.pv'),x=document.createElement('video');b.hidden=true;x.controls=true;x.autoplay=true;x.playsInline=true;x.src='/_blob/'+b.dataset.asset;pv.insertBefore(x,pv.firstChild)}
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
   else if(act==='cpinvite')await copyInvite(id||'',false);
