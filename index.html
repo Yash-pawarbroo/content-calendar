@@ -453,6 +453,13 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .pwrow{display:flex;gap:8px;align-items:center}
 .trow.agrow{grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) 110px 120px !important;cursor:default}
 .invitebox{margin-bottom:14px}
+.wsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.wscard{gap:14px}
+.wsmark{flex:none;width:38px;height:38px;border-radius:11px;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:600}
+.wsname{display:block;font-size:1.05rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsstats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--soft);border-radius:12px;padding:10px 6px}
+.wsstat{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;color:var(--muted)}
+.wsstat b{font-size:1.1rem;color:var(--ink)}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authswap{margin:0;text-align:center}.authswap .authlink{font-size:inherit;color:var(--ink);font-weight:600;padding:0}
@@ -733,7 +740,7 @@ function readHash(){
 function renderSide(){
   const list=inClient(),nav=(v,icon,label)=>'<button class="nv'+(view===v||(v==='videos'&&view==='project')?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
   let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1></div><div class="slabel">MAIN</div>'+
-    nav('videos','video','Videos')+nav('overview','home','Overview')+nav('clients','user','Clients')+nav('analytics','chart','Analytics')+'<div class="slabel">WORKFLOW</div>';
+    nav('clients','folder','Workspaces')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+'<div class="slabel">WORKFLOW</div>';
   STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
   h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings');
   const adminNav=(CSC||isAdmin())?'<div class="sidebot">'+nav('admin','check','Admin')+'</div>':'';
@@ -753,7 +760,7 @@ function renderTop(){
   if(curWs!=='all'&&wsLoaded&&!wsOf(curWs))curWs='all';
   if(document.activeElement!==sel){sel.innerHTML='<option value="all">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('');sel.value=curWs}
   const v=view==='project'?videos.find(x=>x.id===curVideo):null;
-  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Clients',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
+  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Workspaces',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
   if(CSC){const g=isGuest(),sw=false;$('#roleSel').hidden=!sw;const rt=$('#roleTxt');rt.hidden=sw;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
@@ -789,7 +796,7 @@ function vVideos(){
   const ql=q.toLowerCase();
   const list=inClient().filter(v=>(curStage==='all'||stageOf(v)===curStage)&&(!ql||(v.title||'').toLowerCase().includes(ql)||((wsOf(v.ws)||{}).name||'').toLowerCase().includes(ql)));
   if(role==='editor'){const o={reedit:0,todo:1,scheduled:2,published:3};list.sort((a,b)=>o[stageOf(a)]-o[stageOf(b)])}
-  let h='<div class="pagehead"><div><div class="eyebrow">YOUR STUDIO</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row"><select class="field" id="stageSel" aria-label="Stage"><option value="all">All stages</option>'+STAGES.map(([k,l])=>'<option value="'+k+'"'+(curStage===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'+
+  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+'</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row"><select class="field" id="stageSel" aria-label="Stage"><option value="all">All stages</option>'+STAGES.map(([k,l])=>'<option value="'+k+'"'+(curStage===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'+
     (isClient()?'<button class="btn" data-act="cpinvite">'+ic('link')+'Invite your editor</button>':'')+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div></div>';
   if(isClient()&&inviteUrl)h+='<section class="card invitebox"><div class="chead"><span class="ctitle">Your editor’s invite link</span><button class="btn sm" data-act="hideinvite">Close</button></div><p class="meta">Send this link to your editor. They sign up from it and can start on your videos straight away. Share it only with your editor.</p><div class="row" style="flex-wrap:nowrap"><input class="field grow" readonly value="'+esc(inviteUrl)+'" aria-label="Editor invite link" onfocus="this.select()"><button class="btn sm dark" data-act="cpinvite">Copy</button>'+(armedDelete==='inv'?'<button class="btn sm danger" data-act="newinvite">Replace link?</button>':'<button class="btn sm" data-act="newinvite">New link</button>')+'</div></section>';
   if(!list.length)return h+emptyBox('video',q?'No matches':'No videos here yet',q?'Nothing matches “'+esc(q)+'”.':'Videos appear here when they are added.',isOwner()&&!q?'<button class="btn sm" data-act="add">'+ic('plus',14)+'New video</button>':'');
@@ -962,11 +969,15 @@ function noteCard(v){
     (canWrite?'<textarea class="noteIn" data-key="v'+id+'" rows="3" maxlength="400" placeholder="Write a note…" aria-label="Note"></textarea><button class="neobtn" data-act="note" data-id="'+id+'">Add note</button>':'')+'</aside>';
 }
 function vClients(){
-  let h='<div class="pagehead"><h2 class="ptitle">Clients</h2>'+(isAdmin()?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'')+'</div>';
-  if(!workspaces.length)return h+emptyBox('user','No clients yet','Each client gets its own videos and calendar.');
-  h+='<div class="table"><div class="trow th"><span>CLIENT</span><span>VIDEOS</span><span>TO EDIT</span><span>SCHEDULED</span><span>PUBLISHED</span></div>';
-  workspaces.forEach(w=>{const l=videos.filter(v=>v.ws===w.id),c=k=>l.filter(v=>stageOf(v)===k).length;
-    h+='<button class="trow" data-act="ws" data-ws="'+esc(w.id)+'"><span class="t1">'+esc(w.name)+'</span><span class="num">'+l.length+'</span><span class="num">'+(c('todo')+c('reedit'))+'</span><span class="num">'+c('scheduled')+'</span><span class="num">'+c('published')+'</span></button>'});
+  const adm=isAdmin();
+  let h='<div class="pagehead"><div><div class="eyebrow">YOUR STUDIO</div><h2 class="ptitle">Workspaces</h2><p class="meta">Each client has their own workspace. Open one to see its videos, upload files and deliver edits.</p></div>'+(adm?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New workspace</button>':'')+'</div>';
+  if(!workspaces.length)return h+emptyBox('user','No workspaces yet',adm?'Create a workspace for your first client.':'Workspaces appear here when you are added to a client.',adm?'<button class="btn sm" data-act="new-ws">'+ic('plus',14)+'New workspace</button>':'');
+  h+='<div class="wsgrid">';
+  workspaces.forEach(w=>{const l=videos.filter(v=>v.ws===w.id),c=k=>l.filter(v=>stageOf(v)===k).length,st=(n,t)=>'<span class="wsstat"><b class="num">'+n+'</b><span>'+t+'</span></span>';
+    h+='<section class="card wscard"><div class="chead"><span class="row" style="flex-wrap:nowrap;min-width:0"><span class="wsmark">'+esc((w.name||'?').trim().charAt(0).toUpperCase())+'</span><span style="min-width:0"><b class="wsname">'+esc(w.name)+'</b><span class="meta" style="display:block">'+l.length+(l.length===1?' video':' videos')+'</span></span></span></div>'+
+      '<div class="wsstats">'+st(c('todo')+c('reedit'),'To edit')+st(c('review'),'Edited')+st(c('scheduled'),'Scheduled')+st(c('published'),'Published')+'</div>'+
+      '<button class="btn dark wide" data-act="ws" data-ws="'+esc(w.id)+'">Open workspace</button>'+
+      (adm&&CSC?'<div class="two"><button class="btn sm" data-act="cplink" data-id="'+esc(w.id)+'">'+ic('link',14)+'Client link</button><button class="btn sm" data-act="cpinvite" data-id="'+esc(w.id)+'">'+ic('link',14)+'Editor link</button></div>':'')+'</section>'});
   return h+'</div>';
 }
 function vAnalytics(){
@@ -1441,6 +1452,7 @@ readHash();if(!role)role='owner';renderAll();
       if(user){
         const w=await user.can('data.write');if(w===false){canWrite=false;if(!CSC)notice('You have view-only access to this workspace.')}
         if(CSC&&CSC.me&&CSC.me.role==='owner')role='owner';
+        if(CSC&&CSC.me&&!CSC.me.ws&&CSC.me.role!=='pending'&&!/^#(v-|[a-z]+$)/.test(location.hash||'')){view='clients'}
         if(CSC&&CSC.me&&CSC.me.role!=='guest'&&CSC.me.role!=='owner'){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
         try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
           if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
