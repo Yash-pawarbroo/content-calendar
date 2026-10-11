@@ -6,7 +6,7 @@
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   // A client's private link ends in #c=<their key>: remember it and tidy the address.
   try{var hm=/^#c=(l_[0-9a-z_]{20,90})$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}}catch(e){}
-  try{var jm=/^#join=(j_[0-9a-z_]{10,60})$/.exec(location.hash);if(jm)window.CSC.join=jm[1]}catch(e){}
+  try{var jm=/^#join=([je]_[0-9a-z_]{10,60})$/.exec(location.hash);if(jm)window.CSC.join=jm[1]}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign(KEY?{'x-upload-key':KEY}:{},opt.headers||{});
     return fetch(BASE+path,opt).then(function(r){return r.json().then(function(j){if(!r.ok){var e=new Error(j.error||'Something went wrong.');e.status=r.status;e.code=r.status===401?'auth':'unavailable';throw e}return j})})}
@@ -25,6 +25,7 @@
   window.CSC.signup=function(o){return post('/api/signup',o).then(keep)};
   window.CSC.links=function(){return api('/api/links').then(function(j){return j.links})};
   window.CSC.link=function(ws,renew){return api('/api/link',{method:'POST',body:JSON.stringify({ws:ws,renew:!!renew})}).then(function(j){return j.token})};
+  window.CSC.invite=function(ws,renew){return api('/api/invite',{method:'POST',body:JSON.stringify({ws:ws||'',renew:!!renew})}).then(function(j){return j.token})};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
   window.CSC.teams=function(){return api('/api/teams')};
   window.CSC.joinInfo=function(code){return fetch(BASE+'/api/join-info?code='+encodeURIComponent(code)).then(function(r){return r.ok?r.json():null},function(){return null})};
@@ -427,6 +428,7 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .rolepick button.on{border-color:var(--ink);background:var(--soft)}
 .pwrow{display:flex;gap:8px;align-items:center}
 .trow.agrow{grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) 110px 120px !important;cursor:default}
+.invitebox{margin-bottom:14px}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authlink{align-self:center;border:0;background:none;font:inherit;font-size:.84rem;color:var(--muted,#6b6459);text-decoration:underline;cursor:pointer;padding:4px}
@@ -503,7 +505,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, joinName='', joinBad=false;
+let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -530,6 +532,7 @@ function fileBase(v){return (v.title||'video').replace(/[^\w\- ]+/g,'').trim().r
 function isOwner(){return canWrite&&role==='owner'}
 function isEditor(){return canWrite&&role==='editor'}
 function who(){if(CSC&&!CSC.me)return 'Guest';if(isGuest())return edName||'Guest';return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
+function isClient(){return !!(CSC&&CSC.me&&CSC.me.role==='client')}
 function isGuest(){return !!(CSC&&CSC.me&&CSC.me.role==='guest')}
 function isAdmin(){return CSC?!!(CSC.me&&CSC.me.role==='owner'):isOwner()}
 function roleLabel(){return CSC&&CSC.me?({owner:'Admin',editor:'Editor',client:'Client',pending:'Waiting for approval'}[CSC.me.role]||'Member'):(role==='owner'?'Owner':'Editor')}
@@ -621,7 +624,7 @@ async function doDownload(v,aid,label,srcName,btn){
 
 /* ---------- shell ---------- */
 function go(v,id){
-  view=v;curVideo=id||null;armedDelete=null;
+  view=v;curVideo=id||null;armedDelete=null;if(v==='admin')loadPeople();
   try{history.replaceState(null,'','#'+(v==='project'?'v-'+id:v))}catch(e){}
   renderAll();try{window.scrollTo(0,0)}catch(e){}
 }
@@ -690,7 +693,8 @@ function vVideos(){
   const list=inClient().filter(v=>(curStage==='all'||stageOf(v)===curStage)&&(!ql||(v.title||'').toLowerCase().includes(ql)||((wsOf(v.ws)||{}).name||'').toLowerCase().includes(ql)));
   if(role==='editor'){const o={reedit:0,todo:1,scheduled:2,published:3};list.sort((a,b)=>o[stageOf(a)]-o[stageOf(b)])}
   let h='<div class="pagehead"><div><div class="eyebrow">YOUR STUDIO</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row"><select class="field" id="stageSel" aria-label="Stage"><option value="all">All stages</option>'+STAGES.map(([k,l])=>'<option value="'+k+'"'+(curStage===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'+
-    (isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div></div>';
+    (isClient()?'<button class="btn" data-act="cpinvite">'+ic('link')+'Invite your editor</button>':'')+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div></div>';
+  if(isClient()&&inviteUrl)h+='<section class="card invitebox"><div class="chead"><span class="ctitle">Your editor’s invite link</span><button class="btn sm" data-act="hideinvite">Close</button></div><p class="meta">Send this link to your editor. They sign up from it and can start on your videos straight away. Share it only with your editor.</p><div class="row" style="flex-wrap:nowrap"><input class="field grow" readonly value="'+esc(inviteUrl)+'" aria-label="Editor invite link" onfocus="this.select()"><button class="btn sm dark" data-act="cpinvite">Copy</button>'+(armedDelete==='inv'?'<button class="btn sm danger" data-act="newinvite">Replace link?</button>':'<button class="btn sm" data-act="newinvite">New link</button>')+'</div></section>';
   if(!list.length)return h+emptyBox('video',q?'No matches':'No videos here yet',q?'Nothing matches “'+esc(q)+'”.':'Videos appear here when they are added.',isOwner()&&!q?'<button class="btn sm" data-act="add">'+ic('plus',14)+'New video</button>':'');
   return h+list.map(v=>'<article class="vblock">'+projectBlock(v,false)+'</article>').join('');
 }
@@ -923,10 +927,10 @@ function vAdmin(){
         (armedDelete===v.id?'<button class="btn sm danger" data-act="delete" data-id="'+esc(v.id)+'">Delete?</button>':'<button class="btn sm sq" data-act="delete" data-id="'+esc(v.id)+'" aria-label="Delete '+esc(v.title)+'">'+ic('trash',14)+'</button>')+'</span></div>'});
     h+='</div><p class="meta">Deleting a video removes its uploaded files and frees the space.</p>'}
   h+='</section><section class="card"><div class="chead"><span class="ctitle">Clients</span><button class="btn sm dark" data-act="new-ws">'+ic('plus',14)+'New client</button></div>';
-  if(CSC)h+='<p class="meta">Each client has a private link. They open it to upload their A-roll, B-roll and script and to approve edits, with no account. Anyone who has the link can open that client’s workspace, so use New link if one gets shared by mistake; the old link then stops working.</p>';
+  if(CSC)h+='<p class="meta">Each client has a private link. They open it to upload their A-roll, B-roll and script and to approve edits, with no account. From their workspace the client can invite their own editor; you can also copy that editor link here. Anyone who has the link can open that client’s workspace, so use New link if one gets shared by mistake; the old link then stops working.</p>';
   if(!workspaces.length)h+='<p class="meta">No clients yet.</p>';
   workspaces.forEach(w=>{const n=videos.filter(v=>v.ws===w.id).length;
-    h+='<div class="frow" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>'+esc(w.name)+'</b> <span class="meta">'+n+(n===1?' video':' videos')+'</span></span>'+(CSC?'<button class="btn sm dark" data-act="cplink" data-id="'+esc(w.id)+'">'+ic('link',14)+'Copy client link</button>'+(wsLinks[w.id]?(armedDelete==='ln:'+w.id?'<button class="btn sm danger" data-act="newlink" data-id="'+esc(w.id)+'">Replace link?</button>':'<button class="btn sm" data-act="newlink" data-id="'+esc(w.id)+'">New link</button>'):''):'')+'<button class="btn sm" data-act="renws" data-id="'+esc(w.id)+'">Rename</button>'+
+    h+='<div class="frow" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>'+esc(w.name)+'</b> <span class="meta">'+n+(n===1?' video':' videos')+'</span></span>'+(CSC?'<button class="btn sm dark" data-act="cplink" data-id="'+esc(w.id)+'">'+ic('link',14)+'Copy client link</button><button class="btn sm" data-act="cpinvite" data-id="'+esc(w.id)+'">Copy editor link</button>'+(wsLinks[w.id]?(armedDelete==='ln:'+w.id?'<button class="btn sm danger" data-act="newlink" data-id="'+esc(w.id)+'">Replace link?</button>':'<button class="btn sm" data-act="newlink" data-id="'+esc(w.id)+'">New link</button>'):''):'')+'<button class="btn sm" data-act="renws" data-id="'+esc(w.id)+'">Rename</button>'+
       (n?'':(armedDelete==='ws:'+w.id?'<button class="btn sm danger" data-act="delws" data-id="'+esc(w.id)+'">Delete?</button>':'<button class="btn sm sq" data-act="delws" data-id="'+esc(w.id)+'" aria-label="Delete client '+esc(w.name)+'">'+ic('trash',14)+'</button>'))+'</div>'});
   return h+'</section>';
 }
@@ -947,9 +951,9 @@ function vSignIn(){
     '<div><label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com" value="'+esc(authV.email||'')+'"></div>'+
     '<div><label class="meta" for="authPw">Password</label><div class="pwrow"><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'"'+(up?' placeholder="At least 6 characters"':'')+'><button type="button" class="btn sm" data-act="showpw" aria-label="Show or hide the password">Show</button></div></div>'+
     '<p class="err" id="authErr" hidden></p><button class="btn dark wide" data-act="authgo">'+(up?(jn?'Join team':'Create workspace'):'Log in')+'</button>'+
-    '<p class="meta">'+(up?(jn?'Your team’s admin approves your account and chooses the clients you work on.':'You become the admin of your own workspace: add clients, invite editors, and keep every video in one place.'):'Forgot your password? Ask your team’s admin to reset it.')+'</p>'+
+    '<p class="meta">'+(up?(jn?(joinAuto?'You can start on this client’s videos as soon as you sign up.':'Your team’s admin approves your account and chooses the clients you work on.'):'You become the admin of your own workspace: add clients, invite editors, and keep every video in one place.'):'Forgot your password? Ask your team’s admin to reset it.')+'</p>'+
     '<div class="clientnote">'+ic('user',16)+'<span><b>Are you a client?</b> You don’t need an account. Open the private link your team sent you.</span></div>'+
-    (jn?'':'<div class="clientnote">'+ic('video',16)+'<span><b>Are you an editor?</b> Ask your team for their invite link, then sign up from it.</span></div>')+
+    (jn?'':'<div class="clientnote">'+ic('video',16)+'<span><b>Are you an editor?</b> Ask your client or team for their invite link, then sign up from it.</span></div>')+
     '<button type="button" class="authlink" data-act="nav" data-view="admin">Site owner sign in</button>');
 }
 function vPending(){
@@ -964,6 +968,13 @@ async function copyLink(id,renew){
   if(!t){try{t=await CSC.link(id,renew);wsLinks[id]=t}catch(e){return fail(e)}}
   const u=clientUrl(t);let ok=false;try{await navigator.clipboard.writeText(u);ok=true}catch(e){}
   if(ok)notice((renew?'New link created and copied. The old link no longer works. ':'Client link copied. ')+'Send it to the client.');else prompt('Copy this link and send it to the client',u);
+  lastHtml='';renderAll();
+}
+async function copyInvite(ws,renew){
+  let t;try{t=await CSC.invite(ws,renew)}catch(e){return fail(e)}
+  const u=location.origin+location.pathname+'#join='+t;let ok=false;try{await navigator.clipboard.writeText(u);ok=true}catch(e){}
+  if(isClient())inviteUrl=u;
+  if(ok)notice((renew?'New invite link created and copied. The old one no longer works. ':'Editor invite link copied. ')+'Send it to the editor.');else if(!isClient())prompt('Copy this link and send it to the editor',u);
   lastHtml='';renderAll();
 }
 async function copyJoin(renew){
@@ -1140,7 +1151,7 @@ document.addEventListener('click',async ev=>{
   const pk=ev.target.closest('[data-pick]');if(pk){const i=document.getElementById(pk.dataset.pick);if(i)i.click();return}
   const b=ev.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,id=b.dataset.id,v=id?videos.find(x=>x.id===id):null;
-  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin'].includes(act)&&armedDelete)armedDelete=null;
+  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin','newinvite'].includes(act)&&armedDelete)armedDelete=null;
   if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
   else if(act==='stage'){curStage=b.dataset.stage;go('videos')}
   else if(act==='ws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);curStage='all';go('videos')}
@@ -1183,6 +1194,9 @@ document.addEventListener('click',async ev=>{
   }
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
+  else if(act==='cpinvite')await copyInvite(id||'',false);
+  else if(act==='newinvite'){if(armedDelete!=='inv'){armedDelete='inv';renderAll();return}armedDelete=null;await copyInvite(id||'',true)}
+  else if(act==='hideinvite'){inviteUrl='';renderAll()}
   else if(act==='cpjoin')await copyJoin(false);
   else if(act==='newjoin'){if(armedDelete!=='jn'){armedDelete='jn';renderAll();return}armedDelete=null;await copyJoin(true)}
   else if(act==='nojoin'){location.hash='';location.reload()}
@@ -1339,7 +1353,7 @@ readHash();if(!role)role='owner';renderAll();
   if(!db){wsLoaded=vidLoaded=true;notice('Saving is not available in this view, so changes stay on this screen only. Sign in to Claude to save and share them.');renderAll();return}
   renderAll();refreshUsage();
   const onErr=()=>notice('The live connection stopped. Reload the page to reconnect.');
-  if(CSC&&CSC.join&&!CSC.me){authMode='signup';CSC.joinInfo(CSC.join).then(j=>{joinName=j?j.name:'';joinBad=!j;renderAll()})}
+  if(CSC&&CSC.join&&!CSC.me){authMode='signup';CSC.joinInfo(CSC.join).then(j=>{joinName=j?j.name:'';joinAuto=!!(j&&j.auto);joinBad=!j;renderAll()})}
   loadPeople();setInterval(()=>{if(view==='admin'&&!document.hidden)loadPeople()},20000);
   db.collection('workspaces').onSnapshot(s=>{workspaces=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));wsLoaded=true;renderAll()},onErr);
   if(CSC&&isAdmin())db.collection('access').onSnapshot(s=>{access=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));renderAll()},()=>{});
