@@ -846,10 +846,6 @@ function vAdmin(){
   if(!isAdmin()&&CSC)return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Admin</h2><section class="card" style="margin-top:18px"><label class="meta" for="adminPw">Password</label><input id="adminPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="adminin">Sign in</button><p class="err" id="adminErr" hidden></p></section><p class="meta" style="margin-top:12px">Admins manage people, access codes and clients.</p></div>';
   if(!isAdmin())return emptyBox('check','Admins only','Ask the workspace admin for access.');
   let h='<div class="pagehead"><div><div class="eyebrow">ADMIN</div><h2 class="ptitle">Admin</h2><p class="meta">People, access and clients for this workspace.</p></div></div>';
-  if(CSC){const open=appSettings.open!==false;
-    h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Who can open this workspace</span><span class="badge '+(open?'warn':'ok')+'">'+(open?'Open to anyone with the link':'Access code needed')+'</span></div>'+
-      '<div class="two"><button class="btn'+(open?' dark':'')+'" data-act="setopen" data-arg="1" aria-pressed="'+open+'">Anyone with the link</button><button class="btn'+(open?'':' dark')+'" data-act="setopen" data-arg="0" aria-pressed="'+(!open)+'">Only people with an access code</button></div>'+
-      '<p class="meta">'+(open?'Anyone who has the link can see every client’s videos, download them and upload files, without signing in. Only deleting, clients and this Admin page need the admin password.':'Visitors must enter an access code you created below. Clients see only their own videos.')+'</p></section>'}
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People and access</span><span class="meta">'+(CSC?access.length+' access codes':'')+'</span></div>';
   if(CSC){
     h+='<p class="meta">Give each editor or client their own access code. Editors can upload edits for the clients you choose. Clients see only their own videos. Removing a code ends that person’s access.</p>';
