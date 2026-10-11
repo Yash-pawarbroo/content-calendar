@@ -395,6 +395,33 @@ div.trow.advrow{cursor:default}
 dialog.wide{width:min(980px,calc(100vw - 32px))}
 .fullpv{background:#17140f;border-radius:12px;overflow:hidden;display:grid;place-items:center}
 .fullpv video,.fullpv img{display:block;max-width:100%;max-height:68vh;width:100%;object-fit:contain}
+.authpage .side,.authpage .topbar,.authpage .hosted{display:none !important}
+.authpage .app{grid-template-columns:1fr;padding:10px}
+.authpage .main{background:none;border:0}
+.authpage .content{display:grid;place-items:center;min-height:calc(100vh - 20px);padding:20px 6px;max-width:none}
+.auth{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);width:min(900px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 30px 60px -40px rgba(40,30,10,.45)}
+.authside{background:#1d1a16;color:#f4efe6;padding:34px 30px;display:flex;flex-direction:column;gap:18px}
+.authside h1{font-size:1.55rem;line-height:1.2;font-weight:600;letter-spacing:-.01em;margin:10px 0 8px}
+.authbrand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:.92rem}
+.authlogo,.authic{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.1)}
+.authpt{display:flex;gap:12px;align-items:flex-start}
+.authpt b{display:block;font-weight:600}
+.authpt span:not(.authic){color:#b9b1a3;font-size:.86rem}
+.authform{padding:34px 34px 26px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.authform .field{width:100%;max-width:none}
+.authform label{display:block;margin-bottom:4px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--soft);border-radius:12px}
+.seg button{border:0;background:none;border-radius:9px;padding:8px;font:inherit;font-weight:600;color:var(--muted,#6b6459);cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.rolepick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rolepick button{display:flex;flex-direction:column;gap:3px;text-align:left;font:inherit;color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:12px;cursor:pointer}
+.rolepick button span{color:var(--muted,#6b6459);font-size:.8rem}
+.rolepick button.on{border-color:var(--ink);background:var(--soft)}
+.pwrow{display:flex;gap:8px;align-items:center}
+.authlink{align-self:center;border:0;background:none;font:inherit;font-size:.84rem;color:var(--muted,#6b6459);text-decoration:underline;cursor:pointer;padding:4px}
+.authlink:hover{color:var(--ink)}
+@media(max-width:760px){.auth{grid-template-columns:1fr}.authside{padding:22px}.authside h1{font-size:1.2rem;margin:4px 0}.authpt{display:none}.authform{padding:22px 18px}}
+@media(max-width:420px){.authform .two{grid-template-columns:1fr}}
 @media(min-width:861px){.trow.acrow.pprow{grid-template-columns:minmax(0,1fr) 90px minmax(0,1.1fr) minmax(0,1.4fr) 270px !important}}
 </style>
 
@@ -851,6 +878,7 @@ function vTeam(){
     '<section class="card" style="grid-column:1 / -1"><span class="ctitle">Adding people</span><p class="meta">People are added from the Share button on this page. Give editors “Editor” access so they can upload files. Everyone you add can see every client in this workspace; per-client access is not available in this prototype.</p></section></div>';
 }
 function vAdmin(){
+  if(CSC&&!CSC.me)return vAdminIn();
   if(!isAdmin()&&CSC)return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Admin</h2><section class="card" style="margin-top:18px"><label class="meta" for="adminPw">Password</label><input id="adminPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="adminin">Sign in</button><p class="err" id="adminErr" hidden></p></section><p class="meta" style="margin-top:12px">Admins manage people and clients.</p></div>';
   if(!isAdmin())return emptyBox('check','Admins only','Ask the workspace admin for access.');
   let h='<div class="pagehead"><div><div class="eyebrow">ADMIN</div><h2 class="ptitle">Admin</h2><p class="meta">People, access and clients for this workspace.</p></div></div>';
@@ -886,20 +914,32 @@ function vAdmin(){
       (n?'':(armedDelete==='ws:'+w.id?'<button class="btn sm danger" data-act="delws" data-id="'+esc(w.id)+'">Delete?</button>':'<button class="btn sm sq" data-act="delws" data-id="'+esc(w.id)+'" aria-label="Delete client '+esc(w.name)+'">'+ic('trash',14)+'</button>'))+'</div>'});
   return h+'</section>';
 }
+function authWrap(title,sub,inner){
+  const pt=(icon,t,d)=>'<div class="authpt"><span class="authic">'+ic(icon,16)+'</span><div><b>'+t+'</b><span>'+d+'</span></div></div>';
+  return '<div class="auth"><div class="authside"><div class="authbrand"><span class="authlogo">'+ic('video',16)+'</span>Content Scheduling Calendar</div>'+
+    '<h1>Every video, from raw footage to posted, in one place.</h1>'+
+    pt('up','Clients upload','A-roll, B-roll and the script for each video.')+pt('video','Editors deliver','Download the files, upload the finished edit.')+pt('cal','Approve and schedule','Pick the Instagram date and track how it does.')+'</div>'+
+    '<div class="authform"><h2 class="ptitle">'+title+'</h2><p class="meta" style="margin:-4px 0 6px">'+sub+'</p>'+inner+'</div></div>';
+}
 function vSignIn(){
   const up=authMode==='signup',cl=authRole==='client';
-  return '<div class="adminin authbox"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">'+(up?'Create your account':'Log in')+'</h2><section class="card" style="margin-top:18px">'+
-    '<div class="two"><button class="btn'+(up?'':' dark')+'" data-act="authmode" data-arg="login" aria-pressed="'+(!up)+'">Log in</button><button class="btn'+(up?' dark':'')+'" data-act="authmode" data-arg="signup" aria-pressed="'+up+'">Sign up</button></div>'+
-    (up?'<span class="meta">I am</span><div class="two"><button class="btn'+(cl?' dark':'')+'" data-act="authrole" data-arg="client" aria-pressed="'+cl+'">A client</button><button class="btn'+(cl?'':' dark')+'" data-act="authrole" data-arg="editor" aria-pressed="'+(!cl)+'">An editor</button></div>'+
-      '<label class="meta" for="authName">Your name</label><input id="authName" class="field" maxlength="40" autocomplete="name" value="'+esc(authV.name||'')+'">'+
-      (cl?'<label class="meta" for="authBrand">Brand or channel name</label><input id="authBrand" class="field" maxlength="40" placeholder="Shown as your workspace name" value="'+esc(authV.brand||'')+'">':''):'')+
-    '<label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" value="'+esc(authV.email||'')+'">'+
-    '<label class="meta" for="authPw">Password</label><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'">'+
-    '<button class="btn dark wide" data-act="authgo">'+(up?'Create account':'Log in')+'</button><p class="err" id="authErr" hidden></p></section>'+
-    '<p class="meta" style="margin-top:12px">'+(up?(cl?'You get your own workspace, where you upload your A-roll, B-roll and script and approve the edits.':'After you sign up, the admin approves your account. Then you can download source files and upload edits.'):'Forgot your password? Ask the admin to reset it.')+'</p></div>';
+  const rp=(r,icon,t,d)=>'<button type="button" class="'+(authRole===r?'on':'')+'" data-act="authrole" data-arg="'+r+'" aria-pressed="'+(authRole===r)+'">'+ic(icon,18)+'<b>'+t+'</b><span>'+d+'</span></button>';
+  return authWrap(up?'Create your account':'Welcome back',up?'It takes less than a minute.':'Log in to your workspace.',
+    '<div class="seg"><button type="button" class="'+(up?'':'on')+'" data-act="authmode" data-arg="login" aria-pressed="'+(!up)+'">Log in</button><button type="button" class="'+(up?'on':'')+'" data-act="authmode" data-arg="signup" aria-pressed="'+up+'">Sign up</button></div>'+
+    (up?'<div class="rolepick">'+rp('client','user','I’m a client','I send footage and approve edits')+rp('editor','video','I’m an editor','I edit and deliver videos')+'</div>'+
+      '<div class="'+(cl?'two':'')+'"><div><label class="meta" for="authName">Your name</label><input id="authName" class="field" maxlength="40" autocomplete="name" value="'+esc(authV.name||'')+'"></div>'+
+      (cl?'<div><label class="meta" for="authBrand">Brand or channel</label><input id="authBrand" class="field" maxlength="40" placeholder="Your workspace name" value="'+esc(authV.brand||'')+'"></div>':'')+'</div>':'')+
+    '<div><label class="meta" for="authEmail">Email</label><input id="authEmail" class="field" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com" value="'+esc(authV.email||'')+'"></div>'+
+    '<div><label class="meta" for="authPw">Password</label><div class="pwrow"><input id="authPw" class="field" type="password" autocomplete="'+(up?'new-password':'current-password')+'"'+(up?' placeholder="At least 6 characters"':'')+'><button type="button" class="btn sm" data-act="showpw" aria-label="Show or hide the password">Show</button></div></div>'+
+    '<p class="err" id="authErr" hidden></p><button class="btn dark wide" data-act="authgo">'+(up?'Create account':'Log in')+'</button>'+
+    '<p class="meta">'+(up?(cl?'You get your own private workspace straight away.':'The admin approves editor accounts before you can start.'):'Forgot your password? Ask the admin to reset it.')+'</p>'+
+    '<button type="button" class="authlink" data-act="nav" data-view="admin">Admin sign in</button>');
 }
 function vPending(){
-  return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Waiting for approval</h2><section class="card" style="margin-top:18px"><p class="meta">Thanks, '+esc(CSC.me.name||'there')+'. Your editor account is created. You can start as soon as the admin approves it.</p><button class="btn dark wide" data-act="recheck">Check again</button></section></div>';
+  return authWrap('Waiting for approval','Thanks, '+esc(CSC.me.name||'there')+'. Your editor account is created.','<p class="meta">You can start as soon as the admin approves it.</p><button class="btn dark wide" data-act="recheck">Check again</button><button type="button" class="authlink" data-act="signout">Use a different account</button>');
+}
+function vAdminIn(){
+  return authWrap('Admin','Manage people, clients and storage.','<div><label class="meta" for="adminPw">Admin password</label><input id="adminPw" class="field" type="password" autocomplete="off"></div><p class="err" id="adminErr" hidden></p><button class="btn dark wide" data-act="adminin">Sign in</button><button type="button" class="authlink" data-act="nav" data-view="videos">Back to log in</button>');
 }
 function loadPeople(){if(!(CSC&&CSC.users&&isAdmin()))return;CSC.users().then(u=>{people=u;peopleLoaded=true;if(view==='admin')renderAll()},()=>{})}
 function pplErr(e){const p=$('#pplErr');if(p){p.textContent=(e&&e.message)||'That did not work. Try again.';p.hidden=false}}
@@ -913,6 +953,7 @@ function vSettings(){
     (usage&&usage.maxBytes?'<span class="ctitle">Storage</span><p class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used · '+usage.files+' files · '+LIM+' per file</p>':'')+'</section></div>';
 }
 function renderAll(){
+  document.body.classList.toggle('authpage',!!(CSC&&(!CSC.me||CSC.me.role==='pending')));
   renderSide();renderTop();
   let html;
   if(db&&!(wsLoaded&&vidLoaded))html=emptyBox('video','Loading your workspace','Clients and videos will appear here.');
@@ -1109,6 +1150,7 @@ document.addEventListener('click',async ev=>{
     try{if(authMode==='signup')await CSC.signup({name:val('authName'),brand:val('authBrand'),email,password:pw,role:authRole});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
   }
   else if(act==='recheck')location.reload();
+  else if(act==='showpw'){const p=$('#authPw');p.type=p.type==='password'?'text':'password';b.textContent=p.type==='password'?'Show':'Hide'}
   else if(act==='pplok'){b.disabled=true;try{await CSC.userUpdate({id,ok:true})}catch(x){pplErr(x)}loadPeople()}
   else if(act==='pplpw'){
     const u=people.find(x=>x.id===id),pw=prompt('New password for '+(u?u.name:'this person')+' (at least 6 characters). Tell them the new password yourself.');
