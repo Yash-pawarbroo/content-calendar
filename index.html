@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script>window.CSC_API="https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev";</script><script>// Runs the calendar on Cloudflare: same app, with data and files kept in the R2 bucket.
 (function(){
   var BASE=String(window.CSC_API||'').replace(/\/+$/,'');
-  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
+  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,adminSignIn:function(code){return fetch(BASE+'/api/check',{headers:{'x-upload-key':code}}).then(function(r){return r.ok?r.json():null}).then(function(me){if(me&&me.role==='owner'){try{localStorage.setItem('csc.pass',code)}catch(e){}location.reload();return true}return false}).catch(function(){return false})},signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign({'x-upload-key':KEY},opt.headers||{});
@@ -345,6 +345,10 @@ div.trow.acrow{cursor:default}
 .acform{display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1.2fr) auto;gap:8px}
 .acform .field{max-width:none;width:100%}
 @media (max-width:860px){.acform{grid-template-columns:1fr}.trow.acrow{grid-template-columns:minmax(0,1fr) auto !important}.trow.acrow>:nth-child(4){display:block !important;grid-column:1 / -1}.trow.acrow>:nth-child(5){display:flex !important}}
+.sidebot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.adminin{max-width:340px}
+.adminin .field{width:100%}
+@media (max-width:860px){.sidebot{margin-top:0;padding-top:0;border-top:0}}
 </style>
 
 <div class="app">
@@ -541,9 +545,11 @@ function renderSide(){
   let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1></div><div class="slabel">MAIN</div>'+
     nav('videos','video','Videos')+nav('overview','home','Overview')+nav('clients','user','Clients')+nav('analytics','chart','Analytics')+'<div class="slabel">WORKFLOW</div>';
   STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
-  h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings')+(isAdmin()?nav('admin','check','Admin'):'');
+  h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings');
+  const adminNav=(CSC||isAdmin())?'<div class="sidebot">'+nav('admin','check','Admin')+'</div>':'';
   if(usage&&usage.maxBytes){const pct=Math.min(100,Math.round(usage.bytes/usage.maxBytes*100));
-    h+='<div class="storage"><b>Storage</b><span class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div></div>'}
+    h+=adminNav+'<div class="storage" style="margin-top:8px"><b>Storage</b><span class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div></div>'}
+  else h+=adminNav;
   $('#side').innerHTML=h;
 }
 function renderTop(){
@@ -775,6 +781,7 @@ function vTeam(){
     '<section class="card" style="grid-column:1 / -1"><span class="ctitle">Adding people</span><p class="meta">People are added from the Share button on this page. Give editors “Editor” access so they can upload files. Everyone you add can see every client in this workspace; per-client access is not available in this prototype.</p></section></div>';
 }
 function vAdmin(){
+  if(!isAdmin()&&CSC)return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Admin</h2><section class="card" style="margin-top:18px"><label class="meta" for="adminPw">Password</label><input id="adminPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="adminin">Sign in</button><p class="err" id="adminErr" hidden></p></section><p class="meta" style="margin-top:12px">Admins manage people, access codes and clients.</p></div>';
   if(!isAdmin())return emptyBox('check','Admins only','Ask the workspace admin for access.');
   let h='<div class="pagehead"><div><div class="eyebrow">ADMIN</div><h2 class="ptitle">Admin</h2><p class="meta">People, access and clients for this workspace.</p></div></div>';
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People and access</span><span class="meta">'+(CSC?access.length+' access codes':'')+'</span></div>';
@@ -977,6 +984,11 @@ document.addEventListener('click',async ev=>{
     else if(k===1){/* nothing else to clear */}
     await patchVideo(id,patch);for(const a of gone)await dropAsset(a);refreshUsage();
   }
+  else if(act==='adminin'){
+    const pw=val('adminPw'),e=$('#adminErr');if(!pw)return;b.disabled=true;
+    const ok=CSC&&CSC.adminSignIn?await CSC.adminSignIn(pw):false;
+    if(!ok){b.disabled=false;e.textContent='That password is not correct.';e.hidden=false}
+  }
   else if(act==='signout'){if(CSC&&CSC.signOut)CSC.signOut()}
   else if(act==='renws')openDlg('renws',id);
   else if(act==='delws'){
@@ -1080,7 +1092,7 @@ document.addEventListener('keydown',async e=>{
   e.preventDefault();z.classList.toggle('over',type==='dragover');
   if(type==='drop'&&e.dataTransfer&&e.dataTransfer.files.length){const [id,arg]=z.dataset.dz.split('|'),[k,vs]=arg.split(':');if(k==='edited')stageEdit(id,e.dataTransfer.files[0]);else await uploadFiles(id,k,+vs||1,e.dataTransfer.files)}
 }));
-document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='adminPw'){e.preventDefault();const b=document.querySelector('[data-act="adminin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
 $('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
 $('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDlg()});
