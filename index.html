@@ -5,12 +5,12 @@
   window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   var CHUNK=50*1024*1024;
-  function api(path,opt){opt=opt||{};opt.headers=Object.assign({'x-upload-key':KEY},opt.headers||{});
+  function api(path,opt){opt=opt||{};opt.headers=Object.assign(KEY?{'x-upload-key':KEY}:{},opt.headers||{});
     return fetch(BASE+path,opt).then(function(r){return r.json().then(function(j){if(!r.ok){var e=new Error(j.error||'Something went wrong.');e.status=r.status;e.code=r.status===401?'auth':'unavailable';throw e}return j})})}
   // No blocking screen: the app opens signed out, and people sign in from the page itself.
   var ready=new Promise(function(res){
-    if(!KEY)return res();
-    api('/api/check').then(function(me){window.CSC.me=me;res()},function(e){if(e.status===401){KEY='';try{localStorage.removeItem('csc.pass')}catch(x){}}res()});
+    api('/api/check').then(function(me){window.CSC.me=me;res()},function(e){
+      if(e.status===401&&KEY){KEY='';try{localStorage.removeItem('csc.pass')}catch(x){}api('/api/check').then(function(me){window.CSC.me=me;res()},function(){res()})}else res()});
   });
   function trySign(code,adminOnly){return fetch(BASE+'/api/check',{headers:{'x-upload-key':code}}).then(function(r){return r.ok?r.json():null}).then(function(me){
     if(me&&(!adminOnly||me.role==='owner')){try{localStorage.setItem('csc.pass',code)}catch(e){}location.reload();return true}return false}).catch(function(){return false})}
@@ -349,6 +349,9 @@ div.trow.acrow{cursor:default}
 .advrow{grid-template-columns:minmax(0,2fr) minmax(0,1.1fr) 110px minmax(0,1.3fr) auto !important}
 div.trow.advrow{cursor:default}
 @media (max-width:860px){.trow.advrow{grid-template-columns:minmax(0,1fr) auto !important}.trow.advrow>:nth-child(5){display:flex !important}.trow.advrow>:nth-child(2){display:none}}
+.hosted{margin:12px 28px 0;background:var(--ink);color:#fff;border-radius:10px;padding:10px 14px}
+.hosted a{color:#fff;font-weight:600}
+@media (max-width:860px){.hosted{margin-inline:16px}}
 </style>
 
 <div class="app">
@@ -361,6 +364,7 @@ div.trow.advrow{cursor:default}
       <div class="profile"><img class="avatar" id="avatar" alt="" hidden><div><div class="pname" id="pname">You</div>
         <select class="prole" id="roleSel" aria-label="View as"><option value="owner">Owner</option><option value="editor">Editor</option></select><div class="prole" id="roleTxt" hidden></div></div><button class="btn sm" id="signOut" data-act="signout" hidden>Sign out</button></div>
     </div>
+    <p class="hosted" id="hosted" hidden></p>
     <p class="notice" id="notice" hidden></p>
     <main class="content" id="main"></main>
   </div>
@@ -441,7 +445,8 @@ function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){
 function fileBase(v){return (v.title||'video').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,60)||'video'}
 function isOwner(){return canWrite&&role==='owner'}
 function isEditor(){return canWrite&&role==='editor'}
-function who(){if(CSC&&!CSC.me)return 'Guest';return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
+function who(){if(CSC&&!CSC.me)return 'Guest';if(isGuest())return edName||'Guest';return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
+function isGuest(){return !!(CSC&&CSC.me&&CSC.me.role==='guest')}
 function isAdmin(){return CSC?!!(CSC.me&&CSC.me.role==='owner'):isOwner()}
 function roleLabel(){return CSC&&CSC.me?({owner:'Admin',editor:'Editor',client:'Client'}[CSC.me.role]||'Member'):(role==='owner'?'Owner':'Editor')}
 function hasLegacy(v){return okAsset(v.rawAsset)||!!safeUrl(v.rawUrl)}
@@ -552,7 +557,13 @@ function renderSide(){
   else h+=adminNav;
   $('#side').innerHTML=h;
 }
+function renderHosted(){
+  const el=$('#hosted'),u=!CSC&&safeUrl(appSettings.hostedUrl);
+  if(!el)return;el.hidden=!u;
+  if(u)el.innerHTML='<b>This is the preview, limited to 20 MB per file.</b> Large videos upload on the live site, which looks the same: <a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(u.replace(/^https?:\/\//,''))+' ↗</a>';
+}
 function renderTop(){
+  renderHosted();
   const sel=$('#wsSel');
   if(curWs!=='all'&&wsLoaded&&!wsOf(curWs))curWs='all';
   if(document.activeElement!==sel){sel.innerHTML='<option value="all">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('');sel.value=curWs}
@@ -560,7 +571,7 @@ function renderTop(){
   $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Clients',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
-  if(CSC){$('#roleSel').hidden=true;const rt=$('#roleTxt');rt.hidden=false;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me}
+  if(CSC){const g=isGuest();$('#roleSel').hidden=!g;const rt=$('#roleTxt');rt.hidden=g;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
 }
 
 /* ---------- views ---------- */
@@ -784,6 +795,10 @@ function vAdmin(){
   if(!isAdmin()&&CSC)return '<div class="adminin"><div class="eyebrow">CONTENT SCHEDULING CALENDAR</div><h2 class="ptitle">Admin</h2><section class="card" style="margin-top:18px"><label class="meta" for="adminPw">Password</label><input id="adminPw" class="field" type="password" autocomplete="off"><button class="btn dark wide" data-act="adminin">Sign in</button><p class="err" id="adminErr" hidden></p></section><p class="meta" style="margin-top:12px">Admins manage people, access codes and clients.</p></div>';
   if(!isAdmin())return emptyBox('check','Admins only','Ask the workspace admin for access.');
   let h='<div class="pagehead"><div><div class="eyebrow">ADMIN</div><h2 class="ptitle">Admin</h2><p class="meta">People, access and clients for this workspace.</p></div></div>';
+  if(CSC){const open=appSettings.open!==false;
+    h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Who can open this workspace</span><span class="badge '+(open?'warn':'ok')+'">'+(open?'Open to anyone with the link':'Access code needed')+'</span></div>'+
+      '<div class="two"><button class="btn'+(open?' dark':'')+'" data-act="setopen" data-arg="1" aria-pressed="'+open+'">Anyone with the link</button><button class="btn'+(open?'':' dark')+'" data-act="setopen" data-arg="0" aria-pressed="'+(!open)+'">Only people with an access code</button></div>'+
+      '<p class="meta">'+(open?'Anyone who has the link can see every client’s videos, download them and upload files, without signing in. Only deleting, clients and this Admin page need the admin password.':'Visitors must enter an access code you created below. Clients see only their own videos.')+'</p></section>'}
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People and access</span><span class="meta">'+(CSC?access.length+' access codes':'')+'</span></div>';
   if(CSC){
     h+='<p class="meta">Give each editor or client their own access code. Editors can upload edits for the clients you choose. Clients see only their own videos. Removing a code ends that person’s access.</p>';
@@ -817,7 +832,7 @@ function vSignIn(){
 function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
   return '<div class="pagehead"><h2 class="ptitle">Settings</h2></div><div class="grid2"><section class="card"><span class="ctitle">Profile</span><label class="meta" for="edName">Name shown on uploads and notes</label><input id="edName" class="field" maxlength="40" placeholder="'+esc(profileName||'Your name')+'" value="'+esc(edName)+'">'+
-    (CSC?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
+    (CSC&&!isGuest()?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
     '<section class="card"><span class="ctitle">Connections</span><div class="row">'+ic('insta')+'<b>Instagram</b><span class="badge">Not connected</span></div><p class="meta">Automatic likes, comments, shares and comment feeds need an Instagram connection, which this prototype does not have. Numbers are entered by hand.</p>'+
     '<span class="ctitle">Large files</span><label class="meta" for="upUrl">Address of your large-file upload page. When set, an “Upload a large file” button appears next to every link box.</label>'+
     (isOwner()?'<div class="row" style="flex-wrap:nowrap"><input id="upUrl" class="field grow" type="url" placeholder="https://…workers.dev" value="'+esc(appSettings.uploaderUrl||'')+'"><button class="btn" data-act="saveset">Save</button></div><p class="err" id="setErr" hidden></p>':'<p class="meta">'+(safeUrl(appSettings.uploaderUrl)?esc(appSettings.uploaderUrl):'Not set up yet.')+'</p>')+
@@ -828,7 +843,7 @@ function renderAll(){
   let html;
   if(db&&!(wsLoaded&&vidLoaded))html=emptyBox('video','Loading your workspace','Clients and videos will appear here.');
   else if(CSC&&!CSC.me)html=view==='admin'?vAdmin():vSignIn();
-  else if(!workspaces.length&&view!=='team'&&view!=='settings'&&view!=='admin')html=emptyBox('user','Start with your first client','Each client gets its own videos and calendar.',canWrite?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'');
+  else if(!workspaces.length&&view!=='team'&&view!=='settings'&&view!=='admin')html=emptyBox('user','Start with your first client',isAdmin()?'Each client gets its own videos and calendar.':'Nothing here yet. The admin adds clients from the Admin page.',isAdmin()?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'');
   else html=({overview:vOverview,calendar:vCalendar,videos:vVideos,project:vProject,clients:vClients,analytics:vAnalytics,team:vTeam,settings:vSettings,admin:vAdmin}[view]||vVideos)();
   if(html!==lastHtml){
     const keep={},fk=document.activeElement&&document.activeElement.dataset?document.activeElement.dataset.key:null;
@@ -998,6 +1013,10 @@ document.addEventListener('click',async ev=>{
     else if(k===1){/* nothing else to clear */}
     await patchVideo(id,patch);for(const a of gone)await dropAsset(a);refreshUsage();
   }
+  else if(act==='setopen'){
+    appSettings=Object.assign({},appSettings,{open:b.dataset.arg==='1'});lastHtml='';renderAll();
+    if(db){try{await db.doc('settings/app').set(appSettings)}catch(x){fail(x)}}
+  }
   else if(act==='accin'){
     const pw=val('accPw'),e=$('#accErr');if(!pw)return;b.disabled=true;
     const ok=CSC&&CSC.signIn?await CSC.signIn(pw):false;
@@ -1092,7 +1111,7 @@ document.addEventListener('click',async ev=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='stageSel'){curStage=t.value;renderAll()}
-  else if((t.id==='roleSel'||t.id==='roleSel2')&&!CSC){role=t.value;LS.set('csc.role',role);renderAll()}
+  else if((t.id==='roleSel'||t.id==='roleSel2')&&(!CSC||isGuest())){role=t.value;LS.set('csc.role',role);renderAll()}
   else if(t.id==='wsSel'){curWs=t.value;LS.set('csc.ws',curWs);if(view==='project')go('videos');else renderAll()}
   else if(t.type==='file'&&t.id!=='rowPick'){const s=document.getElementById('p-'+t.id);if(s)s.textContent=t.files&&t.files[0]?t.files[0].name:'No file chosen'}
 });
@@ -1129,7 +1148,7 @@ readHash();if(!role)role='owner';renderAll();
       const user=await c.use('user');
       if(user){
         const w=await user.can('data.write');if(w===false){canWrite=false;if(!CSC)notice('You have view-only access to this workspace.')}
-        if(CSC&&CSC.me){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
+        if(CSC&&CSC.me&&CSC.me.role!=='guest'){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
         try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
           if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
       }
