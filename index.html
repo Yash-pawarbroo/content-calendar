@@ -1,0 +1,1117 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Content Scheduling Calendar</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script>window.CSC_API="https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev";</script><script>// Runs the calendar on Cloudflare: same app, with data and files kept in the R2 bucket.
+(function(){
+  var BASE=String(window.CSC_API||'').replace(/\/+$/,'');
+  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
+  var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
+  var CHUNK=50*1024*1024;
+  function api(path,opt){opt=opt||{};opt.headers=Object.assign({'x-upload-key':KEY},opt.headers||{});
+    return fetch(BASE+path,opt).then(function(r){return r.json().then(function(j){if(!r.ok){var e=new Error(j.error||'Something went wrong.');e.status=r.status;e.code=r.status===401?'auth':'unavailable';throw e}return j})})}
+  function gate(msg){
+    return new Promise(function(done){
+      var w=document.createElement('div');w.setAttribute('style','position:fixed;inset:0;z-index:99;background:#f1ece2;display:grid;place-items:center;padding:16px;font:15px/1.5 system-ui,sans-serif;color:#1f1c19');
+      w.innerHTML='<form style="background:#fbf9f5;border:1px solid #e6dfd3;border-radius:20px;padding:28px;width:min(400px,100%);display:flex;flex-direction:column;gap:14px"><div style="font-size:1.5rem;font-weight:500;letter-spacing:-.03em">Content Scheduling Calendar</div><div style="color:#6b655d">Enter your access code to continue.</div><input type="password" aria-label="Access code" placeholder="Access code" autocomplete="off" style="height:42px;border:1px solid #e6dfd3;border-radius:10px;padding:0 12px;font:inherit"><div class="m" style="color:#c0271f"></div><button style="height:42px;border:0;border-radius:10px;background:#1f1c19;color:#fff;font:inherit;font-weight:600;cursor:pointer">Continue</button></form>';
+      w.querySelector('.m').textContent=msg||'';
+      w.querySelector('form').onsubmit=function(e){e.preventDefault();KEY=w.querySelector('input').value.trim();if(!KEY)return;
+        api('/api/check').then(function(me){window.CSC.me=me;try{localStorage.setItem('csc.pass',KEY)}catch(x){}w.remove();done()},function(x){w.querySelector('.m').textContent=x.status===401?'That code is not recognised.':x.message})};
+      (document.body||document.documentElement).appendChild(w);w.querySelector('input').focus();
+    });
+  }
+  var ready=new Promise(function(res){
+    function start(){(KEY?api('/api/check'):Promise.reject({status:401})).then(function(me){window.CSC.me=me;res()},function(e){gate(e.status===401?'':(e.message||'')).then(res)})}
+    if(document.body)start();else document.addEventListener('DOMContentLoaded',start);
+  });
+
+  var cache={},seen={},subs={};
+  function fire(c){(subs[c]||[]).forEach(function(f){try{f()}catch(e){}})}
+  function pull(c){return api('/api/db/'+c).then(function(d){var s=JSON.stringify(d.docs);if(seen[c]!==s){seen[c]=s;cache[c]=d.docs;fire(c)}}).catch(function(){})}
+  function watch(c,fn){(subs[c]=subs[c]||[]).push(fn);if(cache[c])fn();pull(c)}
+  setInterval(function(){if(document.visibilityState!=='hidden')Object.keys(subs).forEach(pull)},6000);
+  var db={
+    collection:function(c){return {onSnapshot:function(cb){watch(c,function(){var m=cache[c]||{};cb({docs:Object.keys(m).map(function(id){return {id:id,data:function(){return m[id]}}})})});return function(){}}}},
+    doc:function(path){var p=path.split('/'),c=p[0],id=p[1];return {
+      set:function(data){cache[c]=Object.assign({},cache[c]||{});cache[c][id]=data;seen[c]='';fire(c);
+        return api('/api/db/'+c+'/'+id,{method:'PUT',body:JSON.stringify(data)}).then(function(){}).catch(function(e){pull(c);throw e})},
+      delete:function(){cache[c]=Object.assign({},cache[c]||{});delete cache[c][id];seen[c]='';fire(c);
+        return api('/api/db/'+c+'/'+id,{method:'DELETE'}).then(function(){}).catch(function(e){pull(c);throw e})},
+      onSnapshot:function(cb){watch(c,function(){var m=cache[c]||{};cb({exists:id in m,id:id,data:function(){return m[id]}})});return function(){}}
+    }}
+  };
+  function say(t){var n=document.getElementById('notice');if(n){n.textContent=t;n.hidden=!t}}
+  function part(q,blob,tries){return api('/api/part?'+q,{method:'PUT',body:blob}).catch(function(e){if(tries<=1)throw e;return new Promise(function(r){setTimeout(r,2500)}).then(function(){return part(q,blob,tries-1)})})}
+  var assets={
+    upload:function(file,opt){var info,parts=[],n=Math.max(1,Math.ceil(file.size/CHUNK)),i=0,type=(opt&&opt.type)||file.type||'application/octet-stream';
+      function next(){if(i>=n)return api('/api/complete',{method:'POST',body:JSON.stringify({key:info.key,uploadId:info.uploadId,parts:parts})});
+        return part('key='+encodeURIComponent(info.key)+'&uploadId='+encodeURIComponent(info.uploadId)+'&n='+(i+1),file.slice(i*CHUNK,Math.min(file.size,(i+1)*CHUNK)),4).then(function(p){parts.push(p);i++;
+          say('Uploading '+(file.name||'file')+': '+Math.round(Math.min(file.size,i*CHUNK)/file.size*100)+'%. Keep this page open.');return next()})}
+      return api('/api/create',{method:'POST',body:JSON.stringify({name:file.name,type:type,blob:true})}).then(function(d){info=d;return next()}).then(function(){
+        return {id:info.id,url:'/_blob/'+info.id,sizeBytes:file.size,contentType:type}},function(e){if(info)api('/api/abort',{method:'POST',body:JSON.stringify(info)}).catch(function(){});throw e})},
+    list:function(){return api('/api/usage').then(function(u){return {assets:[],usage:u}})},
+    delete:function(id){return api('/api/blob-delete',{method:'POST',body:JSON.stringify({id:String(id).replace(/^.*\//,'')})}).then(function(){return {deleted:true}})}
+  };
+  var downloads={save:function(o){var u=URL.createObjectURL(o.data instanceof Blob?o.data:new Blob([o.data])),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},5000);return Promise.resolve({status:'saved'})}};
+  var user={can:function(){return Promise.resolve(true)},isOwner:function(){return Promise.resolve(true)},canEdit:function(){return Promise.resolve(true)},id:function(){return Promise.resolve(null)},
+    me:function(){var m=window.CSC.me||{};return Promise.resolve({id:null,name:m.name||'',avatarUrl:'',email:null,isOwner:m.role==='owner',canEdit:true})}};
+  var caps={db:db,assets:assets,downloads:downloads,user:user};
+  window.claude={use:function(n){return ready.then(function(){return caps[n]||null})}};
+})();
+</script>
+<style>
+/* Layout: left sidebar (main, workflow, settings), top bar (client switcher, search, profile), and a project page in three columns: source versions | performance and notes | edited video. Single white theme by request. */
+:root{
+  --bg:#f1ece2; --panel:#fbf9f5; --soft:#f6f2ea; --soft2:#efe9de; --line:#e6dfd3; --ink:#1f1c19; --muted:#6b655d;
+  --blue:#1f1c19; --blue-soft:#efe9de; --ok:#1f7a45; --ok-soft:#e9f6ee; --warn:#a85a08; --warn-soft:#fff4e0; --danger:#c0271f;
+  --shadow:0 1px 2px rgba(15,17,20,.05);
+  --sans:"Hanken Grotesk","Helvetica Neue",Arial,system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45}
+h1,h2,h3,p{margin:0}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ic{flex:none;display:block}
+.meta{color:var(--muted);font-size:.86rem;overflow-wrap:anywhere}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grow{flex:1;min-width:0}
+.num{font-variant-numeric:tabular-nums}
+
+/* shell */
+.app{display:grid;grid-template-columns:228px minmax(0,1fr);align-items:start}
+.side{position:sticky;top:0;height:100vh;overflow:auto;background:var(--soft);border-right:1px solid var(--line);padding:18px 12px 14px;display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:9px;padding:0 8px 12px}
+.mark{width:22px;height:22px;border-radius:6px;background:var(--ink);color:#fff;display:grid;place-items:center;flex:none}
+h1{font-size:.95rem;font-weight:700;line-height:1.2}
+.slabel{font-size:.68rem;font-weight:600;letter-spacing:.08em;color:var(--muted);padding:14px 10px 6px}
+.nv{display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border:0;border-radius:8px;background:none;text-align:left;color:var(--ink);font-weight:500}
+.nv .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv .cnt{color:var(--muted);font-size:.8rem;font-variant-numeric:tabular-nums}
+.nv:hover{background:var(--soft2)}
+.nv.on{background:#fff;box-shadow:0 1px 2px rgba(15,17,20,.1);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;margin:0 4px}
+.d-todo{background:var(--blue)} .d-reedit{background:#e08a1e} .d-scheduled{background:#9aa0aa} .d-published{background:#2f9e5b}
+.storage{margin-top:auto;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.bar{height:5px;border-radius:3px;background:var(--soft2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue);border-radius:3px}
+.main{min-width:0}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 24px;border-bottom:1px solid var(--line)}
+.field{height:36px;border:1px solid var(--line);border-radius:9px;background:#fff;padding:0 10px;min-width:0}
+select.field{max-width:190px;font-weight:600}
+.crumbs{display:flex;align-items:center;gap:8px;color:var(--muted);min-width:0;flex:1 1 160px}
+.crumbs b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search{position:relative;flex:0 1 240px}
+.search .ic{position:absolute;left:10px;top:10px;color:var(--muted)}
+.search input{width:100%;padding-left:32px}
+.profile{display:flex;align-items:center;gap:9px}
+.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--soft2);flex:none}
+.pname{font-weight:600;line-height:1.15;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prole{border:0;background:none;padding:0;color:var(--muted);font-size:.8rem}
+.content{padding:20px 24px 64px;max-width:1400px}
+.notice{margin:12px 24px 0;color:var(--warn);background:var(--warn-soft);border-radius:9px;padding:9px 12px}
+
+/* buttons */
+.btn{height:36px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 13px;border:1px solid var(--line);border-radius:9px;background:#fff;font-weight:600;font-size:.88rem;color:var(--ink);text-decoration:none;white-space:nowrap;box-shadow:var(--shadow);transition:transform .08s,border-color .12s,background .12s}
+.btn:hover{border-color:#c3c6cc}
+.btn:active{transform:translateY(1px)}
+.btn.sm{height:30px;padding:0 10px;font-size:.82rem}
+.btn.wide{width:100%}
+.btn.dark{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.sq{width:36px;padding:0}
+.btn.sm.sq{width:30px}
+.btn:disabled{opacity:.5;cursor:default}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:.76rem;font-weight:600;background:var(--soft2);color:var(--muted);white-space:nowrap}
+.badge.blue{background:var(--blue-soft);color:var(--blue)}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* cards */
+.card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.chead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ctitle{font-weight:700;font-size:1rem}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:18px 14px;color:var(--muted);text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:.88rem}
+.pagehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.ptitle{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+
+/* project */
+.phead{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin-bottom:16px}
+.pinfo{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:5px}
+.pmeta{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted);font-size:.86rem}
+.pmeta span{display:inline-flex;align-items:center;gap:6px}
+.cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.15fr) minmax(0,.9fr);gap:14px;align-items:start}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.vnum{font-size:1.15rem;font-weight:700}
+.tiles2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.thead{display:flex;align-items:center;gap:9px;min-width:0}
+.ticon{width:32px;height:32px;border-radius:8px;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center;flex:none}
+.tname{font-weight:600;line-height:1.2}
+.thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.thumb{aspect-ratio:1;border-radius:7px;background:var(--soft2);overflow:hidden;display:grid;place-items:center;color:var(--muted);font-weight:600;font-size:.82rem;border:0;padding:0;width:100%}
+.thumb img,.thumb video{width:100%;height:100%;object-fit:cover;display:block}
+.instr{background:var(--soft);border-radius:8px;padding:9px 11px;color:var(--muted);font-size:.88rem;white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);flex:1 1 230px;min-width:0}
+.tab{border:0;background:none;padding:6px 0 9px;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue)}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi .kv{font-size:1.25rem;font-weight:700;letter-spacing:-.01em}
+.kpi .delta{font-size:.78rem;font-weight:600;color:var(--ok);margin-left:6px}
+.kpi .delta.neg{color:var(--danger)}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;border-radius:7px;padding:5px 8px;font-size:.78rem;white-space:nowrap;transform:translate(-50%,-120%)}
+.note{display:flex;flex-direction:column;gap:2px;padding:9px 0;border-top:1px solid var(--line)}
+.note:first-child{border-top:0;padding-top:0}
+.noteform{display:flex;gap:8px}
+.noteform input{flex:1}
+.preview{aspect-ratio:16/10;border-radius:10px;background:var(--soft2);overflow:hidden;display:grid;place-items:center;color:var(--muted);text-align:center;padding:0}
+.preview video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+.prev{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.prev .pt{width:38px;height:38px;border-radius:8px;background:var(--soft2);display:grid;place-items:center;color:var(--muted);flex:none}
+
+/* lists */
+.table{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.trow{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(0,1.2fr) 110px 150px 80px;gap:12px;align-items:center;padding:11px 14px;border:0;border-top:1px solid var(--line);background:#fff;width:100%;text-align:left}
+.trow:first-child{border-top:0}
+button.trow:hover{background:var(--soft)}
+.trow.th{background:var(--soft);color:var(--muted);font-size:.76rem;font-weight:600;letter-spacing:.04em}
+.trow .t1{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.bign{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.drow{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px 14px;padding:11px 0;border-top:1px solid var(--line);align-items:start}
+.drow:first-child{border-top:0}
+.drow.today .dl{color:var(--blue);font-weight:700}
+.dl{color:var(--muted);font-weight:600;font-size:.82rem}
+.slot{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:3px 0;text-align:left;flex-wrap:wrap}
+.slot:hover b{color:var(--blue)}
+
+/* dialog */
+dialog{border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);padding:22px;width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 16px 48px rgba(15,17,20,.2)}
+dialog::backdrop{background:rgba(15,17,20,.4)}
+dialog h2{font-weight:700;font-size:1.15rem}
+#dlgForm{display:flex;flex-direction:column;gap:13px}
+#dlgForm label{display:flex;flex-direction:column;gap:5px;font-size:.84rem;color:var(--muted)}
+#dlgForm label.chk{flex-direction:row;align-items:center;gap:7px;color:var(--ink)}
+#dlgForm input:not([type=checkbox]),#dlgForm select,#dlgForm textarea{border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;background:#fff;font-size:.95rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.dlgacts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:4px}
+.err{color:var(--danger);font-size:.88rem}
+.mat{display:flex;gap:8px 10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.mat:first-child{border-top:0}
+.picked{font-size:.8rem;color:var(--muted)}
+
+.cols.two-col{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+@media (max-width:1180px){.cols.two-col .col:last-child{grid-column:auto}.cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cols .col:last-child{grid-column:1 / -1}}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px;padding:12px 16px}
+  .brand{width:100%;padding:0 0 6px}
+  .slabel,.storage{display:none}
+  .nv{width:auto}
+  .topbar,.content{padding-inline:16px}
+  .notice{margin-inline:16px}
+  .cols,.grid2{grid-template-columns:1fr}
+  .grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .trow{grid-template-columns:minmax(0,1fr) auto}
+  .trow>:nth-child(n+3){display:none}
+  .trow.th{display:none}
+}
+@media (max-width:860px){.cols.two-col{grid-template-columns:1fr}}
+.thumbs{grid-template-columns:repeat(3,56px)}
+.vblock{padding-bottom:26px;margin-bottom:26px;border-bottom:1px solid var(--line)}
+.vblock:last-child{border-bottom:0}
+
+/* warm studio look: beige ground, off-white rounded panel, white cards, near-black controls */
+body{background:var(--bg)}
+.app{padding:10px 10px 10px 0;gap:0}
+.side{background:none;border-right:0;height:calc(100vh - 20px);top:10px;padding:14px 14px 10px}
+.main{background:var(--panel);border:1px solid var(--line);border-radius:20px;min-height:calc(100vh - 20px);overflow:hidden}
+.mark{border-radius:50%}
+h1{font-weight:600;letter-spacing:-.01em}
+.nv{height:40px;border-radius:10px;padding:0 12px}
+.nv:hover{background:rgba(31,28,25,.06)}
+.nv.on{background:var(--ink);color:#fff;box-shadow:0 2px 6px rgba(31,28,25,.25)}
+.nv.on .cnt{color:rgba(255,255,255,.7)}
+.storage{background:var(--panel)}
+.bar i{background:var(--ink)}
+.topbar{padding:14px 28px}
+.content{padding:30px 44px 72px;margin:0 auto}
+.eyebrow{font-size:.7rem;font-weight:600;letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
+.ptitle{font-size:2rem;font-weight:500;letter-spacing:-.035em}
+.pagehead .meta{margin-top:6px;font-size:.95rem}
+.card,.tile,.kpi,.table,.btn,.field{border-color:var(--line)}
+.card{border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(31,28,25,.04)}
+.tile,.kpi{border-radius:12px;background:#fff}
+.ticon{background:var(--soft2);color:var(--ink);border-radius:50%}
+.btn{border-radius:10px}
+.btn.dark,.btn.blue{background:var(--ink);border-color:var(--ink);color:#fff;box-shadow:0 2px 6px rgba(31,28,25,.22)}
+.badge.blue{background:var(--soft2);color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.instr{background:var(--soft)}
+.thumb,.preview,.prev .pt{background:var(--soft2)}
+.trow.th{background:var(--soft)}
+button.trow:hover{background:var(--soft)}
+.d-todo{background:var(--ink)}
+.vblock{border-bottom-color:var(--line)}
+.vblock .ptitle{font-size:1.5rem}
+@media (max-width:860px){
+  .app{padding:0}
+  .side{height:auto;top:0;padding:12px 16px}
+  .main{border-radius:18px 18px 0 0;border-inline:0;min-height:0}
+  .content{padding:22px 16px 56px}
+  .topbar{padding:12px 16px}
+}
+
+/* upload zones with a glass glow */
+.zones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.zonewrap{display:flex;flex-direction:column;gap:8px;min-width:0}
+.zlabel{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.84rem;font-weight:600}
+.zlabel.caps span:first-child{font-size:.7rem;letter-spacing:.12em;color:var(--muted)}
+.drop{min-height:136px;width:100%;border:1.5px dashed #d6ccbb;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(250,246,238,.88));box-shadow:inset 0 1px 0 #fff,0 0 0 1px rgba(255,255,255,.7),0 10px 30px rgba(31,28,25,.08);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px;text-align:center;color:var(--ink);transition:border-color .15s,box-shadow .15s,transform .08s}
+.drop b{font-weight:600}
+button.drop:hover,.drop.over{border-color:var(--ink);box-shadow:inset 0 1px 0 #fff,0 0 0 5px rgba(31,28,25,.05),0 16px 40px rgba(31,28,25,.14)}
+button.drop:active{transform:translateY(1px)}
+.drop.off{background:none;box-shadow:none;color:var(--muted)}
+.drop.has{align-items:stretch;justify-content:space-between;text-align:left;border-style:solid;border-color:var(--line);gap:12px}
+.scriptIn,.instr.glass{border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(250,246,238,.88));box-shadow:inset 0 1px 0 #fff,0 8px 24px rgba(31,28,25,.07)}
+.scriptIn{height:46px;width:100%;padding:0 14px}
+.scriptIn:focus{border-color:var(--ink);outline:0;box-shadow:inset 0 1px 0 #fff,0 0 0 4px rgba(31,28,25,.06),0 8px 24px rgba(31,28,25,.1)}
+.instr.glass{color:var(--ink);padding:12px 14px}
+@media (max-width:520px){.zones{grid-template-columns:1fr}}
+#andetail{max-width:none}
+
+/* video block: files left, soft neumorphic notes right */
+.pgrid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:26px;align-items:start}
+.drop{min-height:168px}
+.neo{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:22px;border:1px solid rgba(255,255,255,.85);background:rgba(251,249,245,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  box-shadow:10px 10px 24px rgba(186,173,150,.42),-10px -10px 24px rgba(255,255,255,.95),inset 0 1px 0 rgba(255,255,255,.9)}
+.nlist{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow:auto;padding:4px}
+.nitem{border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.6);box-shadow:4px 4px 10px rgba(186,173,150,.3),-4px -4px 10px rgba(255,255,255,.9);font-size:.92rem}
+.neo .noteIn{width:100%;resize:vertical;border:0;border-radius:14px;padding:12px 14px;background:rgba(244,240,232,.75);color:var(--ink);box-shadow:inset 4px 4px 9px rgba(186,173,150,.45),inset -4px -4px 9px rgba(255,255,255,.95)}
+.neo .noteIn:focus{outline:0;box-shadow:inset 4px 4px 9px rgba(186,173,150,.55),inset -4px -4px 9px #fff,0 0 0 3px rgba(31,28,25,.08)}
+.neobtn{height:42px;border:0;border-radius:14px;font-weight:600;color:var(--ink);background:rgba(251,249,245,.9);box-shadow:5px 5px 12px rgba(186,173,150,.5),-5px -5px 12px #fff;transition:box-shadow .12s}
+.neobtn:hover{box-shadow:7px 7px 16px rgba(186,173,150,.55),-7px -7px 16px #fff}
+.neobtn:active{box-shadow:inset 4px 4px 9px rgba(186,173,150,.5),inset -4px -4px 9px #fff}
+@media (max-width:1100px){.pgrid{grid-template-columns:1fr}.neo{position:static}}
+
+/* one calm base: flat cards everywhere; glow only on the upload areas */
+.neo{background:var(--soft);border:1px solid var(--line);border-radius:16px;padding:18px;gap:12px;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.nlist{padding:0;gap:8px}
+.nitem{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:none}
+.neo .noteIn{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:none}
+.neo .noteIn:focus,.scriptIn:focus{outline:0;border-color:var(--ink);box-shadow:0 0 0 3px rgba(31,28,25,.08)}
+.neobtn{height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:var(--shadow);font-size:.88rem}
+.neobtn:hover{border-color:#c9bfae;box-shadow:var(--shadow)}
+.neobtn:active{box-shadow:none;transform:translateY(1px)}
+.scriptIn,.instr.glass{background:#fff;box-shadow:none;border-radius:10px}
+.drop{box-shadow:inset 0 1px 0 #fff,0 6px 20px rgba(31,28,25,.05)}
+button.drop:hover,.drop.over{box-shadow:inset 0 1px 0 #fff,0 0 0 4px rgba(31,28,25,.05),0 12px 30px rgba(31,28,25,.1)}
+.drop.has{background:#fff;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* overview: the four stage cards get the same soft glass glow as the upload areas */
+.grid4>button.card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(250,246,238,.88));box-shadow:inset 0 1px 0 #fff,0 6px 20px rgba(31,28,25,.05);transition:box-shadow .15s,border-color .15s,transform .08s}
+.grid4>button.card:hover{border-color:var(--ink);box-shadow:inset 0 1px 0 #fff,0 0 0 4px rgba(31,28,25,.05),0 12px 30px rgba(31,28,25,.1)}
+.grid4>button.card:active{transform:translateY(1px)}
+
+/* everything for one video on one screen: files, the edit, notes */
+.rcol{display:flex;flex-direction:column;gap:14px;position:sticky;top:16px;min-width:0}
+.rcol .neo{position:static}
+.deliver{gap:10px;padding:16px}
+.deliver .field{width:100%}
+.frow{display:flex;align-items:center;gap:10px;min-width:0;text-align:left}
+.mini{width:34px;height:34px;border-radius:8px;background:var(--soft2);overflow:hidden;display:grid;place-items:center;flex:none;color:var(--muted)}
+.mini img,.mini video{width:100%;height:100%;object-fit:cover;display:block}
+.drop.has{padding:12px;gap:8px;justify-content:flex-start}
+.minidrop{display:flex;align-items:center;justify-content:center;gap:8px;min-height:58px;width:100%;padding:8px 12px;border:1.5px dashed #d6ccbb;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(250,246,238,.88));color:var(--ink);font-weight:600;font-size:.9rem;transition:border-color .15s,box-shadow .15s}
+.minidrop span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.minidrop:hover,.minidrop.over{border-color:var(--ink);box-shadow:0 0 0 4px rgba(31,28,25,.05)}
+.minidrop.picked{border-style:solid;border-color:var(--ok);color:var(--ok)}
+@media (max-width:1100px){.rcol{position:static}}
+
+/* dialog add area, admin page */
+.dlgadd{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.orline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.8rem}
+.orline::before,.orline::after{content:"";flex:1;height:1px;background:var(--line)}
+.linkrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.linkrow input{height:36px !important;padding-block:0 !important}
+.dlgacts{border-top:1px solid var(--line);padding-top:14px;margin-top:2px}
+.acrow{grid-template-columns:minmax(0,1.4fr) 90px minmax(0,1.2fr) minmax(0,1.5fr) auto !important}
+div.trow.acrow{cursor:default}
+.acform{display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1.2fr) auto;gap:8px}
+.acform .field{max-width:none;width:100%}
+@media (max-width:860px){.acform{grid-template-columns:1fr}.trow.acrow{grid-template-columns:minmax(0,1fr) auto !important}.trow.acrow>:nth-child(4){display:block !important;grid-column:1 / -1}.trow.acrow>:nth-child(5){display:flex !important}}
+</style>
+
+<div class="app">
+  <aside class="side" id="side"></aside>
+  <div class="main">
+    <div class="topbar">
+      <select id="wsSel" class="field" aria-label="Client"></select>
+      <div class="crumbs" id="crumbs"></div>
+      <div class="search"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" class="field" type="search" placeholder="Search videos, clients…" aria-label="Search videos and clients"></div>
+      <div class="profile"><img class="avatar" id="avatar" alt="" hidden><div><div class="pname" id="pname">You</div>
+        <select class="prole" id="roleSel" aria-label="View as"><option value="owner">Owner</option><option value="editor">Editor</option></select><div class="prole" id="roleTxt" hidden></div></div><button class="btn sm" id="signOut" data-act="signout" hidden>Sign out</button></div>
+    </div>
+    <p class="notice" id="notice" hidden></p>
+    <main class="content" id="main"></main>
+  </div>
+</div>
+<input hidden type="file" id="rowPick" aria-label="Choose files to upload">
+<dialog id="dlg"><form id="dlgForm" novalidate></form></dialog>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:v}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CSC=window.CSC||null;
+const MAX_BYTES=(CSC&&CSC.maxBytes)||20*1024*1024, LIM=CSC?'5 GB':'20 '+'MB';
+const KIND={aroll:'A-roll',broll:'B-roll',script:'Script'};
+const EXT={mp4:'video/mp4',webm:'video/webm',pdf:'application/pdf',txt:'text/plain',md:'text/markdown',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif'};
+const TYPE_EXT={'video/mp4':'mp4','video/webm':'webm','application/pdf':'pdf','text/plain':'txt','text/markdown':'md','image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'};
+const ALLOW={aroll:['mp4','webm'],broll:['mp4','webm','png','jpg','jpeg','webp','gif'],script:['pdf','txt','md'],edited:['mp4','webm']};
+const VID=['mp4','webm','mov','m4v'];
+const ACCEPT={aroll:'.mp4,.webm,video/mp4,video/webm',broll:'.mp4,.webm,.png,.jpg,.jpeg,.webp,.gif',script:'.pdf,.txt,.md',edited:'.mp4,.webm,video/mp4,video/webm'};
+const STAGES=[['todo','To edit'],['reedit','Re-edit'],['scheduled','Scheduled'],['published','Published']];
+const VIEWS=['overview','videos','clients','analytics','team','settings','admin'];
+const IC={
+  home:'<path d="M3 10.5 12 3l9 7.500V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  video:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  chart:'<path d="M5 21V10M12 21V4M19 21v-8"/>',
+  team:'<circle cx="9" cy="8" r="3.500"/><path d="M2.500 20c0-3.500 3-5.500 6.500-5.500s6.500 2 6.500 5.500M16 5a3.500 3.500 0 0 1 0 6M18 15c2.200.600 3.500 2.300 3.500 5"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
+  heart:'<path d="M12 20s-7-4.500-7-10a4 4 0 0 1 7-2.500A4 4 0 0 1 19 10c0 5.500-7 10-7 10z"/>',
+  msg:'<path d="M21 12a8 8 0 0 1-11.800 7L4 20l1-4.500A8 8 0 1 1 21 12z"/>',
+  share:'<path d="M14 5l6 6-6 6v-4c-5 0-8 1.500-10 5 0-6 3-10 10-10z"/>',
+  up:'<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  down:'<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  file:'<path d="M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6"/>',
+  cam:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>',
+  back:'<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  check:'<path d="m5 12 5 5 9-10"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.500 0l3-3a4 4 0 0 0-5.500-5.500l-1 1M14 10a4 4 0 0 0-5.500 0l-3 3a4 4 0 0 0 5.500 5.500l1-1"/>',
+  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>',
+  insta:'<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3.500"/>'
+};
+function ic(n,s){s=s||16;return '<svg class="ic" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+IC[n]+'</svg>'}
+
+let db=null, assets=null, downloads=null, canWrite=true, wsLoaded=false, vidLoaded=false, usage=null;
+let workspaces=[], videos=[];
+let curWs=LS.get('csc.ws','all'), role=LS.get('csc.role',''), edName=LS.get('csc.name',''), profileName='';
+let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
+let weekStart=monday(new Date()), anVideo=null;
+const pendingEdit={};
+let appSettings={}, access=[];
+function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
+let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function safeUrl(u){return /^https?:\/\//i.test(u||'')?u:''}
+function okAsset(id){return /^[A-Za-z0-9_-]{16,64}$/.test(id||'')}
+function monday(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function parseYmd(s){const p=String(s).split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}
+function niceDate(s){const d=parseYmd(s);return MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()}
+function niceTime(t){const p=String(t||'').split(':');if(p.length<2)return '';let h=+p[0];const ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+p[1]+' '+ap}
+function dayOf(ms){const d=new Date(ms);return MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()}
+function stamp(ms){if(!ms)return '';const d=new Date(ms);return dayOf(ms)+', '+niceTime(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'))}
+function fmtSize(b){if(typeof b!=='number'||!b)return '';return b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'}
+function fmtK(n){if(typeof n!=='number')return '—';return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e4?(n/1e3).toFixed(1)+'K':n.toLocaleString('en-IN')}
+function newId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function wsOf(id){return workspaces.find(w=>w.id===id)}
+function inClient(){return videos.filter(v=>curWs==='all'||v.ws===curWs).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))}
+function hasYt(v){return (v.platforms||[]).includes('youtube')}
+function extOf(n){return (String(n||'').split('.').pop()||'').toLowerCase()}
+function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return 'Link'}}
+function fileBase(v){return (v.title||'video').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,60)||'video'}
+function isOwner(){return canWrite&&role==='owner'}
+function isEditor(){return canWrite&&role==='editor'}
+function who(){return (CSC&&CSC.me&&CSC.me.name)||edName||profileName||(role==='owner'?'Owner':'Editor')}
+function isAdmin(){return CSC?!!(CSC.me&&CSC.me.role==='owner'):isOwner()}
+function roleLabel(){return CSC&&CSC.me?({owner:'Admin',editor:'Editor',client:'Client'}[CSC.me.role]||'Member'):(role==='owner'?'Owner':'Editor')}
+function hasLegacy(v){return okAsset(v.rawAsset)||!!safeUrl(v.rawUrl)}
+function materials(v){
+  const out=[];
+  if(hasLegacy(v))out.push({kind:'aroll',asset:v.rawAsset,url:v.rawUrl,name:v.rawName,ver:1});
+  (v.files||[]).forEach(f=>out.push(f));return out;
+}
+function srcN(v){return Math.max(1,v.srcVersions||1,...materials(v).map(m=>m.ver||1))}
+function filesOf(v,ver,kind){const out=[];materials(v).forEach((m,i)=>{if((m.ver||1)===ver&&m.kind===kind)out.push({m,i})});return out}
+function instrOf(v,ver){return (v.instr&&v.instr[ver])||(ver===1?v.notes||'':'')}
+function hasEdit(v){return okAsset(v.editedAsset)||!!safeUrl(v.editedUrl)}
+function isOut(v){return (v.status==='scheduled'||v.status==='published')&&hasEdit(v)}
+function stageOf(v){return v.status==='published'?'published':isOut(v)?'scheduled':v.changeNote?'reedit':'todo'}
+function stageBadge(v){const s=stageOf(v);return '<span class="badge '+(s==='todo'?'blue':s==='reedit'?'warn':s==='published'?'ok':'')+'">'+STAGES.find(x=>x[0]===s)[1]+'</span>'}
+function approval(v){
+  if(v.status==='published')return ['ok','Published'];
+  if(isOut(v))return v.approved?['ok','Approved']:['blue','Ready for review'];
+  if(v.changeNote)return ['warn','Changes requested'];
+  return ['','Waiting for editor'];
+}
+
+/* ---------- storage ---------- */
+function notice(msg){const n=$('#notice');n.textContent=msg||'';n.hidden=!msg}
+function fail(e){if(e&&e.code==='invalid_argument'){canWrite=false;notice('You have view-only access to this workspace.');renderAll()}else notice('That change could not be saved. Please try again.')}
+async function putVideo(id,data){
+  const body=Object.assign({},data);delete body.id;
+  if(db){try{await db.doc('videos/'+id).set(body)}catch(e){fail(e)}}
+  else{const i=videos.findIndex(v=>v.id===id);const row=Object.assign({id},body);if(i<0)videos.push(row);else videos[i]=row;renderAll()}
+}
+async function patchVideo(id,patch){const v=videos.find(x=>x.id===id);if(v)await putVideo(id,Object.assign({},v,patch))}
+async function delVideo(id){
+  if(db){try{await db.doc('videos/'+id).delete()}catch(e){fail(e)}}
+  else{videos=videos.filter(v=>v.id!==id);renderAll()}
+}
+async function putWs(id,data){
+  if(db){try{await db.doc('workspaces/'+id).set(data)}catch(e){fail(e)}}
+  else{workspaces=workspaces.filter(w=>w.id!==id).concat([Object.assign({id},data)]);renderAll()}
+}
+async function refreshUsage(){if(!assets)return;try{const r=await assets.list();usage=r.usage;renderSide()}catch(e){}}
+async function dropAsset(id){if(assets&&okAsset(id)){try{await assets.delete(id)}catch(e){}}}
+function checkFile(f,kind){
+  if(f.size>MAX_BYTES)throw {msg:'“'+f.name+'” is '+fmtSize(f.size)+'. Uploads are limited to '+LIM+' each, so compress it or add it as a link instead.'};
+  if(!ALLOW[kind].includes(extOf(f.name)))throw {msg:'“'+f.name+'” is not a supported file here. Use '+ALLOW[kind].filter(x=>x!=='jpeg').join(', ').toUpperCase()+'.'};
+}
+async function uploadOne(f,kind){
+  checkFile(f,kind);
+  try{const r=await assets.upload(f,{type:EXT[extOf(f.name)]});return {asset:r.id,name:f.name.slice(0,120),size:r.sizeBytes||f.size}}
+  catch(e){
+    const c=e&&e.code;
+    throw {msg:c==='too_large'?'“'+f.name+'” is over the '+LIM+' upload limit. Compress it or add it as a link instead.':c==='unsupported_type'?'“'+f.name+'” could not be stored. If it is a text file, save it as UTF-8 and try again.':c==='quota_or_state'?'File storage for this workspace is full. Delete old files or add links instead.':'The upload did not finish. Check your connection and try again.'};
+  }
+}
+async function uploadFiles(id,kind,ver,list){
+  const fs=Array.from(list||[]);if(!fs.length||!assets)return;
+  try{if(fs.length>12)throw {msg:'Upload up to 12 files at a time.'};fs.forEach(f=>checkFile(f,kind))}catch(e){return notice(e.msg)}
+  const added=[];let problem='';
+  for(let i=0;i<fs.length;i++){
+    notice('Uploading '+KIND[kind]+' file '+(i+1)+' of '+fs.length+'. Keep this page open.');
+    try{const r=await uploadOne(fs[i],kind);added.push({kind,ver,asset:r.asset,name:r.name,size:r.size,at:Date.now()})}catch(e){problem=e.msg||'The upload did not finish.';break}
+  }
+  const v=videos.find(x=>x.id===id);
+  if(!v){for(const a of added)await dropAsset(a.asset);return notice('')}
+  if(added.length)await patchVideo(id,{files:(v.files||[]).concat(added)});
+  notice(problem);refreshUsage();
+}
+async function doDownload(v,aid,label,srcName,btn){
+  if(!okAsset(aid))return;
+  if(CSC&&CSC.direct){const a=document.createElement('a');a.href=(CSC.api||'')+'/_blob/'+aid+'?dl='+encodeURIComponent(fileBase(v)+'-'+label+'.'+(extOf(srcName)||'mp4'));document.body.appendChild(a);a.click();a.remove();return true}
+  if(btn)btn.disabled=true;notice('Preparing the download…');
+  try{
+    const res=await fetch('/_blob/'+aid);if(!res.ok)throw {code:'missing'};
+    const blob=await res.blob();
+    if(!downloads)throw {code:'unavailable'};
+    const ext=TYPE_EXT[(blob.type||'').split(';')[0]]||(EXT[extOf(srcName)]?extOf(srcName).replace('jpeg','jpg'):'mp4');
+    await downloads.save({filename:fileBase(v)+'-'+label+'.'+ext,data:blob});
+    notice('');if(btn)btn.disabled=false;return true;
+  }catch(e){
+    const c=e&&e.code;
+    if(c==='missing')notice('This file is no longer stored here. Ask for it to be uploaded again.');
+    else if(c==='rate_limited')notice('Another download is waiting for your answer. Finish that one first.');
+    else if(c==='declined')notice('');
+    else notice('The download could not start in this view. Open the workspace in a browser and try again.');
+  }
+  if(btn)btn.disabled=false;
+}
+
+/* ---------- shell ---------- */
+function go(v,id){
+  view=v;curVideo=id||null;armedDelete=null;
+  try{history.replaceState(null,'','#'+(v==='project'?'v-'+id:v))}catch(e){}
+  renderAll();try{window.scrollTo(0,0)}catch(e){}
+}
+function readHash(){
+  const h=(location.hash||'').slice(1);
+  if(h.indexOf('v-')===0){view='project';curVideo=h.slice(2)}
+  else if(VIEWS.includes(h)){view=h;curVideo=null}
+}
+function renderSide(){
+  const list=inClient(),nav=(v,icon,label)=>'<button class="nv'+(view===v||(v==='videos'&&view==='project')?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
+  let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1></div><div class="slabel">MAIN</div>'+
+    nav('videos','video','Videos')+nav('overview','home','Overview')+nav('clients','user','Clients')+nav('analytics','chart','Analytics')+'<div class="slabel">WORKFLOW</div>';
+  STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
+  h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings')+(isAdmin()?nav('admin','check','Admin'):'');
+  if(usage&&usage.maxBytes){const pct=Math.min(100,Math.round(usage.bytes/usage.maxBytes*100));
+    h+='<div class="storage"><b>Storage</b><span class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div></div>'}
+  $('#side').innerHTML=h;
+}
+function renderTop(){
+  const sel=$('#wsSel');
+  if(curWs!=='all'&&wsLoaded&&!wsOf(curWs))curWs='all';
+  if(document.activeElement!==sel){sel.innerHTML='<option value="all">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('');sel.value=curWs}
+  const v=view==='project'?videos.find(x=>x.id===curVideo):null;
+  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Clients',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
+  $('#pname').textContent=who();
+  $('#roleSel').value=role;
+  if(CSC){$('#roleSel').hidden=true;const rt=$('#roleTxt');rt.hidden=false;rt.textContent=roleLabel();$('#signOut').hidden=false}
+}
+
+/* ---------- views ---------- */
+function emptyBox(icon,title,text,extra){return '<div class="empty">'+ic(icon,20)+'<b style="color:var(--ink)">'+title+'</b><span>'+text+'</span>'+(extra||'')+'</div>'}
+function vOverview(){
+  const list=inClient(),today=ymd(new Date());
+  let h='<div class="pagehead"><h2 class="ptitle">Overview</h2>'+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div><div class="grid4">';
+  STAGES.forEach(([k,label])=>{h+='<button class="card" style="text-align:left" data-act="stage" data-stage="'+k+'"><span class="row"><i class="dot d-'+k+'" style="margin:0"></i><span class="meta">'+label+'</span></span><span class="bign num">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
+  const up=list.filter(v=>isOut(v)&&v.status==='scheduled'&&v.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).slice(0,6);
+  const todo=list.filter(v=>['todo','reedit'].includes(stageOf(v))).slice(0,6);
+  const li=v=>'<button class="slot" data-act="open" data-id="'+esc(v.id)+'"><b class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(v.title)+'</b>'+(isOut(v)?'<span class="meta num">'+esc(niceDate(v.date))+', '+esc(niceTime(v.time))+'</span>':'')+stageBadge(v)+'</button>';
+  h+='</div><div class="grid2"><section class="card"><div class="chead"><span class="ctitle">Going out next</span></div>'+(up.length?up.map(li).join(''):emptyBox('cal','Nothing scheduled','Edited videos appear here once they have a date.'))+'</section>'+
+    '<section class="card"><div class="chead"><span class="ctitle">Waiting on edits</span><button class="btn sm" data-act="nav" data-view="videos">All videos</button></div>'+(todo.length?todo.map(li).join(''):emptyBox('check','All caught up','No videos are waiting for an edit.'))+'</section></div>';
+  return h;
+}
+function vCalendar(){
+  const today=ymd(new Date()),end=addDays(weekStart,6),list=inClient().filter(v=>isOut(v)&&v.date);
+  let rows='',n=0;
+  for(let i=0;i<7;i++){
+    const d=addDays(weekStart,i),key=ymd(d),items=list.filter(v=>v.date===key).sort((a,b)=>String(a.time).localeCompare(String(b.time)));n+=items.length;
+    rows+='<div class="drow'+(key===today?' today':'')+'"><div class="dl">'+(key===today?'Today':DOW[i])+' '+d.getDate()+'</div><div>'+(items.length?items.map(v=>{const w=wsOf(v.ws);
+      return '<button class="slot" data-act="open" data-id="'+esc(v.id)+'"><span class="meta num" style="width:70px">'+esc(niceTime(v.time))+'</span><b class="grow">'+esc(v.title)+'</b>'+(curWs==='all'&&w?'<span class="meta">'+esc(w.name)+'</span>':'')+
+        (v.deliveredAt?'<span class="meta">Edit uploaded '+esc(stamp(v.deliveredAt))+'</span>':'')+stageBadge(v)+'</button>'}).join(''):'<span class="meta">—</span>')+'</div></div>';
+  }
+  const range=MON[weekStart.getMonth()]+' '+weekStart.getDate()+' – '+(weekStart.getMonth()!==end.getMonth()?MON[end.getMonth()]+' ':'')+end.getDate()+', '+end.getFullYear();
+  return '<div class="pagehead"><div><h2 class="ptitle">'+range+'</h2><p class="meta">'+(n?n+(n===1?' Instagram reel':' Instagram reels')+' this week':'Nothing scheduled this week')+'</p></div>'+
+    '<div class="row"><button class="btn sq" data-act="week" data-d="-7" aria-label="Previous week">‹</button><button class="btn" data-act="week" data-d="0">Today</button><button class="btn sq" data-act="week" data-d="7" aria-label="Next week">›</button></div></div><section class="card">'+rows+'</section>';
+}
+function vVideos(){
+  const ql=q.toLowerCase();
+  const list=inClient().filter(v=>(curStage==='all'||stageOf(v)===curStage)&&(!ql||(v.title||'').toLowerCase().includes(ql)||((wsOf(v.ws)||{}).name||'').toLowerCase().includes(ql)));
+  if(role==='editor'){const o={reedit:0,todo:1,scheduled:2,published:3};list.sort((a,b)=>o[stageOf(a)]-o[stageOf(b)])}
+  let h='<div class="pagehead"><div><div class="eyebrow">YOUR STUDIO</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row"><select class="field" id="stageSel" aria-label="Stage"><option value="all">All stages</option>'+STAGES.map(([k,l])=>'<option value="'+k+'"'+(curStage===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'+
+    (isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div></div>';
+  if(!list.length)return h+emptyBox('video',q?'No matches':'No videos here yet',q?'Nothing matches “'+esc(q)+'”.':'Videos appear here when they are added.',isOwner()&&!q?'<button class="btn sm" data-act="add">'+ic('plus',14)+'New video</button>':'');
+  return h+list.map(v=>'<article class="vblock">'+projectBlock(v,false)+'</article>').join('');
+}
+function thumbs(v,list,arg){
+  if(!list.length)return '<div class="meta">No files yet</div>';
+  let h='<div class="thumbs">';
+  list.slice(0,list.length>3?2:3).forEach(({m})=>{
+    const e=extOf(m.name);let inner=ic(m.url&&!okAsset(m.asset)?'link':'file',18);
+    if(okAsset(m.asset)&&['png','jpg','jpeg','webp','gif'].includes(e))inner='<img src="/_blob/'+esc(m.asset)+'" alt="" loading="lazy">';
+    else if(okAsset(m.asset)&&VID.includes(e))inner='<video src="/_blob/'+esc(m.asset)+'#t=0.1" preload="metadata" muted playsinline></video>';
+    h+='<button class="thumb" data-act="files" data-id="'+esc(v.id)+'" data-arg="'+arg+'" aria-label="View '+esc(m.name||'file')+'">'+inner+'</button>';
+  });
+  if(list.length>3)h+='<button class="thumb" data-act="files" data-id="'+esc(v.id)+'" data-arg="'+arg+'">+'+(list.length-2)+'</button>';
+  return h+'</div>';
+}
+function fileSummary(list){const n=list.length,sz=list.reduce((s,x)=>s+(x.m.size||0),0);return n?n+(n===1?' file':' files')+(sz?' · '+fmtSize(sz):''):'No files'}
+const FMT={aroll:'MP4, WEBM',broll:'JPG, PNG, WEBP, GIF, MP4, WEBM',script:'PDF, TXT, MD'};
+if(CSC){
+  Object.assign(EXT,{mov:'video/quicktime',m4v:'video/x-m4v',mkv:'video/x-matroska',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',doc:'application/msword'});
+  ['aroll','broll','edited'].forEach(k=>ALLOW[k].push('mov','m4v','mkv'));ALLOW.script.push('docx','doc');
+  Object.keys(ALLOW).forEach(k=>{ACCEPT[k]=ALLOW[k].map(x=>'.'+x).join(',')});
+  ['aroll','broll','script'].forEach(k=>{FMT[k]=ALLOW[k].filter(x=>x!=='jpeg').join(', ').toUpperCase()});
+}
+function srcTile(v,ver,kind){
+  const list=filesOf(v,ver,kind),arg=kind+':'+ver,id=esc(v.id),owner=isOwner(),dz=owner&&assets?' data-dz="'+id+'|'+arg+'"':'';
+  let h='<div class="zonewrap"><div class="zlabel"><span>'+KIND[kind]+'</span>'+(list.length?'<span class="meta">'+fileSummary(list)+'</span>':'')+'</div>';
+  if(!list.length)h+=owner?'<button class="drop" data-act="pick" data-id="'+id+'" data-arg="'+arg+'"'+dz+'>'+ic('down',20)+'<b>Upload '+KIND[kind]+'</b><span class="meta">'+FMT[kind]+'</span></button><button class="btn sm" style="align-self:flex-start" data-act="linkonly" data-id="'+id+'" data-arg="'+arg+'">'+ic('link',14)+'Add a link instead</button>'
+    :'<div class="drop off">'+ic('cam',20)+'<span class="meta">No '+KIND[kind]+' yet</span></div>';
+  else h+='<div class="drop has"'+dz+'>'+list.slice(0,4).map(fileRow.bind(null,v)).join('')+'<div class="row">'+
+    (list.length>4||owner?'<button class="btn sm" data-act="files" data-id="'+id+'" data-arg="'+arg+'">'+ic('folder',14)+(list.length>4?'All '+list.length+' files':'Manage')+'</button>':'')+
+    (owner?'<button class="btn sm" data-act="pick" data-id="'+id+'" data-arg="'+arg+'">'+ic('up',14)+'Add</button>':'')+'</div></div>';
+  return h+'</div>';
+}
+function thumbInner(m){
+  const e=extOf(m.name);
+  if(okAsset(m.asset)&&['png','jpg','jpeg','webp','gif'].includes(e))return '<img src="/_blob/'+esc(m.asset)+'" alt="" loading="lazy">';
+  if(okAsset(m.asset)&&VID.includes(e))return '<video src="/_blob/'+esc(m.asset)+'#t=0.1" preload="metadata" muted playsinline></video>';
+  return ic(m.url&&!okAsset(m.asset)?'link':'file',16);
+}
+function fileRow(v,x){
+  const m=x.m,nm=m.name||(m.url?hostOf(m.url):KIND[m.kind]);
+  const a=okAsset(m.asset)?'<button class="btn sm sq" data-act="dl" data-id="'+esc(v.id)+'" data-fi="'+x.i+'" aria-label="Download '+esc(nm)+'" title="Download">'+ic('down',14)+'</button>'
+    :safeUrl(m.url)?'<a class="btn sm sq" href="'+esc(m.url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(nm)+'" title="Open link">'+ic('link',14)+'</a>':'';
+  return '<div class="frow"><span class="mini">'+thumbInner(m)+'</span><span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+esc(nm)+'</b>'+(m.size?' <span class="meta">'+fmtSize(m.size)+'</span>':'')+'</span>'+a+'</div>';
+}
+function srcCard(v,ver,latest){
+  const id=esc(v.id),sc=filesOf(v,ver,'script'),ins=instrOf(v,ver),arg='script:'+ver,owner=isOwner();
+  const all=materials(v).filter(m=>(m.ver||1)===ver),last=Math.max(0,...all.map(m=>m.at||0));
+  let acts='';
+  if(sc.length===1&&okAsset(sc[0].m.asset))acts+='<button class="btn sm" data-act="dl" data-id="'+id+'" data-fi="'+sc[0].i+'">'+ic('down',14)+'Script file</button>';
+  else if(sc.length)acts+='<button class="btn sm" data-act="files" data-id="'+id+'" data-arg="'+arg+'">'+ic('file',14)+'Script files</button>';
+  if(owner)acts+='<button class="btn sm" data-act="pick" data-id="'+id+'" data-arg="'+arg+'">'+ic('up',14)+'Upload file</button>'+(ins?'<button class="btn sm" data-act="instr" data-id="'+id+'" data-arg="'+ver+'">'+ic('edit',14)+'Edit</button>':'');
+  return '<section class="card"><div class="chead"><div class="row"><span class="vnum">V'+ver+'</span><span class="badge'+(latest?' blue':'')+'">'+(latest?'Latest':ver===1?'Original':'Revision')+'</span></div><div class="row"><span class="meta">'+(last?'Uploaded '+dayOf(last):'')+'</span>'+
+    (all.filter(m=>okAsset(m.asset)).length>1?'<button class="btn sm" data-act="dlall" data-id="'+id+'" data-arg="'+ver+'">'+ic('down',14)+'Download all</button>':'')+
+    (owner&&srcN(v)>1?(armedDelete==='ver:'+v.id+':'+ver?'<button class="btn sm danger" data-act="delver" data-id="'+id+'" data-arg="'+ver+'">Delete V'+ver+'?</button>':'<button class="btn sm sq" data-act="delver" data-id="'+id+'" data-arg="'+ver+'" aria-label="Delete version '+ver+'" title="Delete version '+ver+'">'+ic('trash',14)+'</button>'):'')+'</div></div>'+
+    '<div class="zones">'+srcTile(v,ver,'aroll')+srcTile(v,ver,'broll')+'</div>'+
+    '<div class="zonewrap"><div class="zlabel caps"><span>SCRIPT</span>'+(sc.length?'<span class="meta">'+fileSummary(sc)+'</span>':'')+'</div>'+
+    (ins?'<div class="instr glass">'+esc(ins)+'</div>':owner?'<input class="field scriptIn" data-id="'+id+'" data-ver="'+ver+'" maxlength="4000" placeholder="Paste your video script here, then press Enter" aria-label="Script for version '+ver+'">':'<div class="meta">No script yet.</div>')+
+    (acts?'<div class="row">'+acts+'</div>':'')+'</div></section>';
+}
+function chartHtml(v){
+  const pts=(v.metricLog||[]).filter(p=>typeof p[metricTab]==='number'&&p.at).map(p=>({t:p.at,y:p[metricTab]}));
+  const label={likes:'Likes',comments:'Comments',shares:'Shares'}[metricTab];
+  if(pts.length<2)return emptyBox('chart','No trend yet','Instagram analytics is not connected. '+(isOwner()?'Update the numbers after posting and the '+label.toLowerCase()+' trend builds here.':'The trend appears once the owner has updated the numbers at least twice.'));
+  const W=520,H=210,L=44,R=14,T=12,B=28,t0=pts[0].t,t1=pts[pts.length-1].t,span=Math.max(1,t1-t0);
+  const max=Math.max(1,...pts.map(p=>p.y)),p10=Math.pow(10,Math.floor(Math.log10(max))),f=max/p10,top=(f<=1?1:f<=2?2:f<=5?5:10)*p10,steps=top>=4?4:top;
+  const X=t=>L+(t-t0)/span*(W-L-R),Y=y=>T+(1-y/top)*(H-T-B);
+  let g='';
+  for(let i=0;i<=steps;i++){const val=top*i/steps,y=Y(val);g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" stroke="#e6dfd3" stroke-width="1"/><text x="'+(L-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="#6b655d">'+fmtK(val)+'</text>'}
+  const line=pts.map((p,i)=>(i?'L':'M')+X(p.t).toFixed(1)+' '+Y(p.y).toFixed(1)).join(' ');
+  const area=line+' L'+X(t1).toFixed(1)+' '+Y(0)+' L'+X(t0).toFixed(1)+' '+Y(0)+' Z';
+  const dots=pts.map((p,i)=>'<circle cx="'+X(p.t).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(i===pts.length-1?5:4)+'" fill="#1f1c19" stroke="#fff" stroke-width="2"/>').join('');
+  const xl='<text x="'+L+'" y="'+(H-8)+'" font-size="11" fill="#6b655d">'+dayOf(t0).replace(/, \d+$/,'')+'</text><text x="'+(W-R)+'" y="'+(H-8)+'" text-anchor="end" font-size="11" fill="#6b655d">'+dayOf(t1).replace(/, \d+$/,'')+'</text>';
+  const data=esc(JSON.stringify(pts.map(p=>({x:X(p.t)/W,y:Y(p.y)/H,l:stamp(p.t),v:p.y.toLocaleString('en-IN')+' '+label.toLowerCase()}))));
+  return '<div class="chart" data-pts="'+data+'"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+label+' over time, from '+dayOf(t0)+' to '+dayOf(t1)+'">'+g+'<path d="'+area+'" fill="#1f1c19" fill-opacity=".08"/><path d="'+line+'" fill="none" stroke="#1f1c19" stroke-width="2" stroke-linejoin="round"/>'+dots+xl+
+    '<line class="cross" y1="'+T+'" y2="'+(H-B)+'" stroke="#0f1114" stroke-opacity=".25" stroke-width="1" visibility="hidden"/></svg><div class="tip" hidden></div></div>'+
+    '<details><summary class="meta" style="cursor:pointer">View as table</summary><div style="margin-top:6px">'+pts.map(p=>'<div class="row meta" style="justify-content:space-between"><span>'+stamp(p.t)+'</span><span class="num" style="color:var(--ink)">'+p.y.toLocaleString('en-IN')+'</span></div>').join('')+'</div></details>';
+}
+function perfCol(v){
+  const id=esc(v.id),log=(v.metricLog||[]),prev=log.length>1?log[log.length-2]:null;
+  const kpi=(k,icon,label)=>{let d='';if(prev&&typeof prev[k]==='number'&&prev[k]>0&&typeof v[k]==='number'){const pc=Math.round((v[k]-prev[k])/prev[k]*100);if(pc)d='<span class="delta'+(pc<0?' neg':'')+'">'+(pc>0?'▲ +':'▼ ')+pc+'%</span>'}
+    return '<div class="kpi">'+ic(icon,18)+'<div><span class="kv num">'+fmtK(v[k])+'</span>'+d+'</div><span class="meta">'+label+'</span></div>'};
+  const tab=(k,l)=>'<button class="tab" role="tab" aria-selected="'+(metricTab===k)+'" data-act="mtab" data-tab="'+k+'">'+l+'</button>';
+  return '<section class="card"><div class="chead"><div class="tabs" role="tablist">'+tab('likes','Likes')+tab('comments','Comments')+tab('shares','Shares')+'</div>'+(isOwner()?'<button class="btn sm" data-act="stats" data-id="'+id+'">'+ic('edit',14)+'Update numbers</button>':'')+'</div>'+
+    '<div class="kpis">'+kpi('likes','heart','Likes')+kpi('comments','msg','Comments')+kpi('shares','share','Shares')+'</div>'+chartHtml(v)+'</section>';
+}
+function talkCol(v){
+  const id=esc(v.id),notes=(v.thread||[]).slice(-30);
+  return '<section class="card"><div class="chead"><span class="ctitle">Recent comments</span></div>'+emptyBox('insta','Instagram is not connected','Comments from the reel will show here once social analytics is connected. Nothing is shown until then.')+'</section>'+
+    '<section class="card"><div class="chead"><span class="ctitle">Team notes</span><span class="meta">'+notes.length+'</span></div>'+
+    (notes.length?'<div>'+notes.map(n=>'<div class="note"><div class="row"><b>'+esc(n.by||'Someone')+'</b><span class="badge">'+(n.role==='owner'?'Owner':'Editor')+'</span><span class="meta">'+esc(stamp(n.at))+'</span></div><div style="overflow-wrap:anywhere">'+esc(n.text)+'</div></div>').join('')+'</div>':'<div class="meta">No notes yet.</div>')+
+    (canWrite?'<div class="noteform notesbox"><input class="field noteIn" data-key="a'+id+'" maxlength="400" placeholder="Write a note for the team…" aria-label="Note"><button class="btn" data-act="note" data-id="'+id+'">Send</button></div>':'')+'</section>';
+}
+function editCol(v){
+  const id=esc(v.id),owner=isOwner(),editor=isEditor(),has=hasEdit(v),ap=approval(v),out=isOut(v);
+  let pv;
+  if(okAsset(v.editedAsset))pv='<div class="preview"><video src="/_blob/'+esc(v.editedAsset)+'" controls preload="metadata" playsinline></video></div>';
+  else if(safeUrl(v.editedUrl))pv='<a class="preview" style="text-decoration:none" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener"><span style="display:flex;flex-direction:column;align-items:center;gap:6px">'+ic('link',22)+'<b style="color:var(--blue)">Open edited video ↗</b><span class="meta">'+esc(hostOf(v.editedUrl))+'</span></span></a>';
+  else pv='<div class="preview"><span style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px">'+ic('video',22)+'<span>No edited video yet</span></span></div>';
+  let h='<section class="card"><div class="chead"><span class="ctitle">Edited video</span>'+(has?'<span class="badge num">v'+(v.revision||1)+'</span>':'')+'</div>'+pv;
+  if(has)h+='<div><b>'+esc(v.title)+' · '+(v.approved||v.status==='published'?'Final cut':'Edit')+'</b>'+(v.editedSize?'<div class="meta">'+fmtSize(v.editedSize)+'</div>':'')+'</div>';
+  h+='<div class="row"><span class="badge '+ap[0]+'">'+(ap[0]==='ok'?ic('check',13):'')+ap[1]+'</span>'+(v.deliveredAt&&has?'<span class="meta">Uploaded '+esc(stamp(v.deliveredAt))+(v.editor?' by '+esc(v.editor):'')+'</span>':'')+'</div>';
+  if(v.changeNote)h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
+  if(v.editorNote&&has)h+='<div class="instr">Editor note: '+esc(v.editorNote)+'</div>';
+  if(out)h+='<div class="row" style="justify-content:space-between"><span class="row">'+ic('insta')+'<span><b class="num">'+esc(niceDate(v.date))+', '+esc(niceTime(v.time))+'</b><div class="meta">Instagram'+(hasYt(v)?' · also YouTube':'')+'</div></span></span>'+(canWrite&&v.status==='scheduled'?'<button class="btn sm" data-act="resched" data-id="'+id+'">Change</button>':'')+'</div>';
+  if(editor&&v.status!=='published')h+='<button class="btn blue wide" data-act="deliver" data-id="'+id+'">'+ic('up')+(has?'Upload new version':'Upload edited video')+'</button>';
+  if(okAsset(v.editedAsset))h+='<button class="btn wide" data-act="dl" data-id="'+id+'">'+ic('down')+'Download</button>';
+  if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Mark published</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Request changes</button></div>';
+  const prev=(v.edits||[]).slice().reverse();
+  h+='<div><b>Previous versions</b>'+(prev.length?'':'<div class="meta">None yet. Older edits are kept here when a new version is uploaded.</div>')+'</div>';
+  prev.forEach(p=>{const i=(v.edits||[]).indexOf(p);
+    h+='<div class="prev"><span class="pt">'+ic('video',17)+'</span><div class="grow"><b>Version '+esc(p.rev||'')+'</b><div class="meta">'+esc(stamp(p.at))+(p.size?' · '+fmtSize(p.size):'')+'</div></div>'+
+      (okAsset(p.asset)?'<button class="btn sm sq" data-act="dlprev" data-id="'+id+'" data-fi="'+i+'" aria-label="Download version '+esc(p.rev||'')+'">'+ic('down',14)+'</button>':safeUrl(p.url)?'<a class="btn sm sq" href="'+esc(p.url)+'" target="_blank" rel="noopener" aria-label="Open version '+esc(p.rev||'')+'">'+ic('link',14)+'</a>':'')+'</div>'});
+  return h+'</section>';
+}
+function vProject(){
+  const v=videos.find(x=>x.id===curVideo);
+  if(!v)return emptyBox('video','Video not found','It may have been deleted.','<button class="btn sm" data-act="nav" data-view="videos">Back to videos</button>');
+  return projectBlock(v,true);
+}
+function projectBlock(v,single){
+  const w=wsOf(v.ws),id=esc(v.id),owner=isOwner(),editor=isEditor(),st=stageOf(v),n=srcN(v);
+  let pri='';
+  if(owner&&st==='scheduled'&&!v.approved)pri='<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>';
+  else if(owner&&st==='scheduled')pri='<button class="btn dark" data-act="publish" data-id="'+id+'">Mark published</button>';
+  let h='<div class="phead">'+(single?'<button class="btn sq" data-act="nav" data-view="videos" aria-label="Back to videos">'+ic('back')+'</button>':'')+'<div class="pinfo"><div class="row"><h2 class="ptitle">'+esc(v.title)+'</h2>'+stageBadge(v)+'</div>'+
+    '<div class="pmeta">'+(w?'<span>'+ic('user',14)+esc(w.name)+'</span>':'')+'<span>'+ic('insta',14)+'Instagram Reel'+(hasYt(v)?' + YouTube':'')+'</span><span>'+ic('cal',14)+(isOut(v)?esc(niceDate(v.date))+', '+esc(niceTime(v.time)):'Not scheduled')+'</span></div></div>'+
+    '<div class="row"><button class="btn" data-act="asel" data-id="'+id+'">'+ic('chart')+'Analytics &amp; edit</button><button class="btn" data-act="sharev" data-id="'+id+'">'+ic('share')+'Copy summary</button>'+
+    (isAdmin()?(armedDelete===v.id?'<button class="btn danger" data-act="delete" data-id="'+id+'">Delete video?</button>':'<button class="btn sq" data-act="delete" data-id="'+id+'" aria-label="Delete video" title="Delete video">'+ic('trash')+'</button>'):'')+pri+'</div></div><div class="pgrid"><div class="col">';
+  for(let i=1;i<=n;i++)h+=srcCard(v,i,i===n);
+  if(owner)h+='<button class="btn wide" data-act="newver" data-id="'+id+'">'+ic('plus')+'Add version '+(n+1)+'</button>';
+  return h+'</div><div class="rcol">'+deliverCard(v)+noteCard(v)+'</div></div>';
+}
+function deliverCard(v){
+  const id=esc(v.id),owner=isOwner(),editor=isEditor(),has=hasEdit(v),out=isOut(v),ap=approval(v),pend=pendingEdit[v.id];
+  let h='<aside class="card deliver" aria-label="Edited video"><div class="chead"><span class="ctitle">Edited video</span><span class="badge '+ap[0]+'">'+ap[1]+'</span></div>';
+  if(v.changeNote)h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
+  if(has){
+    h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Version '+(v.revision||1)+'</b><div class="meta">'+(out?esc(niceDate(v.date))+', '+esc(niceTime(v.time)):'Previous edit')+'</div></span>'+
+      (okAsset(v.editedAsset)?'<button class="btn sm sq" data-act="dl" data-id="'+id+'" aria-label="Download edited video" title="Download">'+ic('down',14)+'</button>':'<a class="btn sm sq" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener" aria-label="Open edited video" title="Open link">'+ic('link',14)+'</a>')+'</div>';
+  }
+  if(editor&&v.status!=='published'){
+    const d=v.date||ymd(addDays(new Date(),1)),t=v.time||'18:00';
+    if(assets)h+='<button class="minidrop'+(pend?' picked':'')+'" data-act="pickedit" data-id="'+id+'" data-dz="'+id+'|edited:0">'+ic(pend?'check':'up',16)+'<span>'+(pend?esc(pend.name):(has?'Choose new version':'Choose edited video'))+'</span></button>';
+    h+=bigLink()+'<input class="field edLink" data-key="l'+id+'" type="url" placeholder="'+(assets?'or paste a link (over '+LIM+')':'Edited video link')+'" aria-label="Edited video link">'+
+      '<div class="two"><input class="field edDate" data-key="d'+id+'" type="date" value="'+esc(d)+'" aria-label="Instagram date"><input class="field edTime" data-key="t'+id+'" type="time" value="'+esc(t)+'" aria-label="Instagram time"></div>'+
+      '<p class="err" hidden></p><button class="btn dark wide" data-act="deliverinline" data-id="'+id+'">'+ic('up')+(has?'Upload new version':'Upload and schedule')+'</button>';
+  }else if(!has)h+='<p class="meta">'+(owner?'Your editor uploads the edit here with a date and time.':'No edit yet.')+'</p>';
+  if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Publish</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Changes</button></div>';
+  return h+'</aside>';
+}
+function noteCard(v){
+  const id=esc(v.id),notes=(v.thread||[]).slice(-12);
+  return '<aside class="neo notesbox" aria-label="Notes"><div class="chead"><span class="ctitle">Notes</span><span class="meta">'+(notes.length||'')+'</span></div>'+
+    (notes.length?'<div class="nlist">'+notes.map(n=>'<div class="nitem"><div class="row"><b>'+esc(n.by||'Someone')+'</b><span class="meta">'+esc(stamp(n.at))+'</span></div><div style="overflow-wrap:anywhere">'+esc(n.text)+'</div></div>').join('')+'</div>':'<p class="meta">Add a note for your editor or client. Everyone on this video sees it.</p>')+
+    (canWrite?'<textarea class="noteIn" data-key="v'+id+'" rows="3" maxlength="400" placeholder="Write a note…" aria-label="Note"></textarea><button class="neobtn" data-act="note" data-id="'+id+'">Add note</button>':'')+'</aside>';
+}
+function vClients(){
+  let h='<div class="pagehead"><h2 class="ptitle">Clients</h2>'+(isAdmin()?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'')+'</div>';
+  if(!workspaces.length)return h+emptyBox('user','No clients yet','Each client gets its own videos and calendar.');
+  h+='<div class="table"><div class="trow th"><span>CLIENT</span><span>VIDEOS</span><span>TO EDIT</span><span>SCHEDULED</span><span>PUBLISHED</span></div>';
+  workspaces.forEach(w=>{const l=videos.filter(v=>v.ws===w.id),c=k=>l.filter(v=>stageOf(v)===k).length;
+    h+='<button class="trow" data-act="ws" data-ws="'+esc(w.id)+'"><span class="t1">'+esc(w.name)+'</span><span class="num">'+l.length+'</span><span class="num">'+(c('todo')+c('reedit'))+'</span><span class="num">'+c('scheduled')+'</span><span class="num">'+c('published')+'</span></button>'});
+  return h+'</div>';
+}
+function vAnalytics(){
+  const list=inClient(),withN=list.filter(v=>['likes','comments','shares'].some(k=>typeof v[k]==='number'));
+  const sum=k=>withN.reduce((s,v)=>s+(typeof v[k]==='number'?v[k]:0),0);
+  let h='<div class="pagehead"><div><h2 class="ptitle">Analytics</h2><p class="meta">Instagram is not connected. Totals come from numbers entered by hand on each video.</p></div></div>';
+  if(!list.length)return h+emptyBox('chart','No videos yet','Add a video to see its edited video, comments and notes here.');
+  if(withN.length)h+='<div class="grid4" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="card">'+ic('heart',18)+'<span class="bign num">'+fmtK(sum('likes'))+'</span><span class="meta">Likes</span></div><div class="card">'+ic('msg',18)+'<span class="bign num">'+fmtK(sum('comments'))+'</span><span class="meta">Comments</span></div><div class="card">'+ic('share',18)+'<span class="bign num">'+fmtK(sum('shares'))+'</span><span class="meta">Shares</span></div></div>';
+  if(!list.some(v=>v.id===anVideo))anVideo=list[0].id;
+  const v=list.find(x=>x.id===anVideo);
+  h+='<div class="table" style="margin-bottom:18px"><div class="trow th"><span>VIDEO</span><span>CLIENT</span><span>LIKES</span><span>COMMENTS</span><span>SHARES</span></div>';
+  list.slice().sort((a,b)=>(b.likes||0)-(a.likes||0)).forEach(x=>{const w=wsOf(x.ws);h+='<button class="trow" data-act="asel" data-id="'+esc(x.id)+'"'+(x.id===anVideo?' style="background:var(--blue-soft)"':'')+'><span class="t1">'+esc(x.title)+'</span><span class="meta">'+esc(w?w.name:'')+'</span><span class="num">'+fmtK(x.likes)+'</span><span class="num">'+fmtK(x.comments)+'</span><span class="num">'+fmtK(x.shares)+'</span></button>'});
+  h+='</div><div class="pagehead" id="andetail"><div class="row"><h2 class="ctitle" style="font-size:1.15rem">'+esc(v.title)+'</h2>'+stageBadge(v)+'</div><button class="btn sm" data-act="open" data-id="'+esc(v.id)+'">Open video files</button></div>'+
+    '<div class="cols two-col"><div class="col">'+perfCol(v)+talkCol(v)+'</div><div class="col">'+editCol(v)+'</div></div>';
+  return h;
+}
+function vTeam(){
+  const eds=[...new Set(videos.map(v=>v.editor).filter(Boolean))];
+  return '<div class="pagehead"><h2 class="ptitle">Team</h2></div><div class="grid2"><section class="card"><span class="ctitle">You</span><div class="row"><b>'+esc(who())+'</b><span class="badge blue">'+(role==='owner'?'Owner':'Editor')+'</span></div><p class="meta">'+(canWrite?'You can add and change videos in this workspace.':'You have view-only access.')+'</p></section>'+
+    '<section class="card"><span class="ctitle">Editors who have delivered</span>'+(eds.length?eds.map(e=>'<div class="row">'+ic('user')+'<b>'+esc(e)+'</b><span class="meta">'+videos.filter(v=>v.editor===e).length+' videos</span></div>').join(''):'<p class="meta">No edits have been uploaded yet.</p>')+'</section>'+
+    '<section class="card" style="grid-column:1 / -1"><span class="ctitle">Adding people</span><p class="meta">People are added from the Share button on this page. Give editors “Editor” access so they can upload files. Everyone you add can see every client in this workspace; per-client access is not available in this prototype.</p></section></div>';
+}
+function vAdmin(){
+  if(!isAdmin())return emptyBox('check','Admins only','Ask the workspace admin for access.');
+  let h='<div class="pagehead"><div><div class="eyebrow">ADMIN</div><h2 class="ptitle">Admin</h2><p class="meta">People, access and clients for this workspace.</p></div></div>';
+  h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People and access</span><span class="meta">'+(CSC?access.length+' access codes':'')+'</span></div>';
+  if(CSC){
+    h+='<p class="meta">Give each editor or client their own access code. Editors can upload edits for the clients you choose. Clients see only their own videos. Removing a code ends that person’s access.</p>';
+    if(access.length){h+='<div class="table"><div class="trow th acrow"><span>NAME</span><span>ROLE</span><span>CLIENT</span><span>ACCESS CODE</span><span></span></div>';
+      access.forEach(a=>{const w=wsOf(a.ws);h+='<div class="trow acrow"><span class="t1">'+esc(a.name)+'</span><span><span class="badge'+(a.role==='editor'?' blue':'')+'">'+(a.role==='editor'?'Editor':'Client')+'</span></span><span class="meta">'+esc(w?w.name:'All clients')+'</span><span class="num" style="overflow-wrap:anywhere">'+esc(a.code)+'</span><span class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm" data-act="copycode" data-arg="'+esc(a.code)+'">Copy</button>'+
+        (armedDelete==='ac:'+a.id?'<button class="btn sm danger" data-act="rmaccess" data-id="'+esc(a.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="rmaccess" data-id="'+esc(a.id)+'" aria-label="Remove access for '+esc(a.name)+'">'+ic('trash',14)+'</button>')+'</span></div>'});
+      h+='</div>'}
+    h+='<div class="acform"><input id="acName" class="field" data-key="acn" maxlength="40" placeholder="Name" aria-label="Name"><select id="acRole" class="field" aria-label="Role"><option value="editor">Editor</option><option value="client">Client</option></select>'+
+      '<select id="acWs" class="field" aria-label="Client"><option value="">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')+'</select><button class="btn dark" data-act="addaccess">'+ic('plus')+'Create access code</button></div><p class="err" id="acErr" hidden></p>'+
+      '<p class="meta">Share this address with them: <b style="color:var(--ink)">'+esc(location.origin)+'</b></p>';
+  }else h+='<p class="meta">In this version people are added with the Share button at the top of the page. Individual access codes for editors and clients are available in the hosted version.</p>';
+  h+='</section><section class="card"><div class="chead"><span class="ctitle">Clients</span><button class="btn sm dark" data-act="new-ws">'+ic('plus',14)+'New client</button></div>';
+  if(!workspaces.length)h+='<p class="meta">No clients yet.</p>';
+  workspaces.forEach(w=>{const n=videos.filter(v=>v.ws===w.id).length;
+    h+='<div class="frow" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>'+esc(w.name)+'</b> <span class="meta">'+n+(n===1?' video':' videos')+'</span></span><button class="btn sm" data-act="renws" data-id="'+esc(w.id)+'">Rename</button>'+
+      (n?'':(armedDelete==='ws:'+w.id?'<button class="btn sm danger" data-act="delws" data-id="'+esc(w.id)+'">Delete?</button>':'<button class="btn sm sq" data-act="delws" data-id="'+esc(w.id)+'" aria-label="Delete client '+esc(w.name)+'">'+ic('trash',14)+'</button>'))+'</div>'});
+  return h+'</section>';
+}
+function vSettings(){
+  return '<div class="pagehead"><h2 class="ptitle">Settings</h2></div><div class="grid2"><section class="card"><span class="ctitle">Profile</span><label class="meta" for="edName">Name shown on uploads and notes</label><input id="edName" class="field" maxlength="40" placeholder="'+esc(profileName||'Your name')+'" value="'+esc(edName)+'">'+
+    (CSC?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
+    '<section class="card"><span class="ctitle">Connections</span><div class="row">'+ic('insta')+'<b>Instagram</b><span class="badge">Not connected</span></div><p class="meta">Automatic likes, comments, shares and comment feeds need an Instagram connection, which this prototype does not have. Numbers are entered by hand.</p>'+
+    '<span class="ctitle">Large files</span><label class="meta" for="upUrl">Address of your large-file upload page. When set, an “Upload a large file” button appears next to every link box.</label>'+
+    (isOwner()?'<div class="row" style="flex-wrap:nowrap"><input id="upUrl" class="field grow" type="url" placeholder="https://…workers.dev" value="'+esc(appSettings.uploaderUrl||'')+'"><button class="btn" data-act="saveset">Save</button></div><p class="err" id="setErr" hidden></p>':'<p class="meta">'+(safeUrl(appSettings.uploaderUrl)?esc(appSettings.uploaderUrl):'Not set up yet.')+'</p>')+
+    (usage&&usage.maxBytes?'<span class="ctitle">Storage</span><p class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used · '+usage.files+' files · '+LIM+' per file</p>':'')+'</section></div>';
+}
+function renderAll(){
+  renderSide();renderTop();
+  let html;
+  if(db&&!(wsLoaded&&vidLoaded))html=emptyBox('video','Loading your workspace','Clients and videos will appear here.');
+  else if(!workspaces.length&&view!=='team'&&view!=='settings'&&view!=='admin')html=emptyBox('user','Start with your first client','Each client gets its own videos and calendar.',canWrite?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'');
+  else html=({overview:vOverview,calendar:vCalendar,videos:vVideos,project:vProject,clients:vClients,analytics:vAnalytics,team:vTeam,settings:vSettings,admin:vAdmin}[view]||vVideos)();
+  if(html!==lastHtml){
+    const keep={},fk=document.activeElement&&document.activeElement.dataset?document.activeElement.dataset.key:null;
+    document.querySelectorAll('[data-key]').forEach(i=>{if(i.value)keep[i.dataset.key]=i.value});
+    $('#main').innerHTML=html;lastHtml=html;
+    document.querySelectorAll('[data-key]').forEach(i=>{if(keep[i.dataset.key])i.value=keep[i.dataset.key];if(fk&&i.dataset.key===fk)i.focus()});
+    bindChart();
+  }
+  if(dlgKind==='files'&&$('#dlg').open)openDlg('files',dlgId,dlgArg);
+}
+function bindChart(){
+  document.querySelectorAll('.chart').forEach(c=>{
+    let pts=[];try{pts=JSON.parse(c.dataset.pts)}catch(e){}
+    const tip=c.querySelector('.tip'),cross=c.querySelector('.cross'),svg=c.querySelector('svg');
+    const move=ev=>{
+      const r=svg.getBoundingClientRect(),x=((ev.touches?ev.touches[0].clientX:ev.clientX)-r.left)/r.width;
+      let best=pts[0];pts.forEach(p=>{if(Math.abs(p.x-x)<Math.abs(best.x-x))best=p});if(!best)return;
+      tip.hidden=false;tip.textContent=best.v+' · '+best.l;tip.style.left=Math.min(Math.max(best.x*r.width,70),r.width-70)+'px';tip.style.top=(best.y*r.height)+'px';
+      cross.setAttribute('x1',best.x*520);cross.setAttribute('x2',best.x*520);cross.setAttribute('visibility','visible');
+    };
+    const out=()=>{tip.hidden=true;cross.setAttribute('visibility','hidden')};
+    svg.addEventListener('mousemove',move);svg.addEventListener('touchstart',move,{passive:true});svg.addEventListener('mouseleave',out);
+  });
+}
+
+/* ---------- dialogs ---------- */
+function wsOptions(sel){return workspaces.map(w=>'<option value="'+esc(w.id)+'"'+(w.id===sel?' selected':'')+'>'+esc(w.name)+'</option>').join('')}
+function acts(label){return '<p class="err" id="f-err" hidden></p><div class="dlgacts"><button type="button" class="btn" data-act="close">Cancel</button><button type="submit" class="btn dark">'+label+'</button></div>'}
+function openDlg(kind,id,arg){
+  dlgKind=kind;dlgId=id||null;dlgArg=arg||null;
+  const v=id?videos.find(x=>x.id===id):null,f=$('#dlgForm');let h='';
+  if(kind==='new-ws'){
+    h='<h2>New client</h2><label>Client or team name<input id="f-name" required maxlength="60" placeholder="e.g. CapGown"></label>'+acts('Add client');
+  }else if(kind==='renws'){
+    const w=wsOf(id);if(!w)return;
+    h='<h2>Rename client</h2><label>Client name<input id="f-name" required maxlength="60" value="'+esc(w.name)+'"></label>'+acts('Save');
+  }else if(kind==='add'){
+    h='<h2>New video</h2><label>Client<select id="f-ws">'+wsOptions(curWs)+'</select></label>'+
+      '<label>Title<input id="f-title" required maxlength="120" placeholder="e.g. GRWM video"></label>'+
+      '<label>Editing instructions (optional)<textarea id="f-notes" rows="3" maxlength="2000" placeholder="Hook, style, length, music…"></textarea></label>'+
+      '<label class="chk"><input type="checkbox" id="f-yt"> Also post on YouTube</label>'+acts('Create video');
+  }else if(kind==='files'&&v&&arg){
+    const [k,vs]=String(arg).split(':'),ver=+vs||1,list=filesOf(v,ver,k);
+    if(!KIND[k])return;
+    h='<h2>'+KIND[k]+' · V'+ver+'</h2><p class="meta">'+esc(v.title)+'</p><div>'+(list.length?list.map(({m,i})=>{
+      let a='';
+      if(okAsset(m.asset))a=downloads?'<button type="button" class="btn sm" data-act="dl" data-id="'+esc(v.id)+'" data-fi="'+i+'">'+ic('down',14)+'Download</button>':'<a class="btn sm" href="/_blob/'+esc(m.asset)+'" target="_blank" rel="noopener">Open ↗</a>';
+      else if(safeUrl(m.url))a='<a class="btn sm" href="'+esc(m.url)+'" target="_blank" rel="noopener">Open link ↗</a>';
+      return '<div class="mat"><div class="grow"><b style="overflow-wrap:anywhere">'+esc(m.name||(m.url?hostOf(m.url):KIND[k]))+'</b><div class="meta">'+[fmtSize(m.size),m.at?dayOf(m.at):''].filter(Boolean).join(' · ')+'</div></div>'+a+
+        (isOwner()?'<button type="button" class="btn sm sq" data-act="rmfile" data-id="'+esc(v.id)+'" data-fi="'+i+'" aria-label="Remove file">'+ic('trash',14)+'</button>':'')+'</div>'}).join(''):'<p class="meta">No files yet.</p>')+'</div>';
+    if(isOwner()){
+      h+='<div class="dlgadd">';
+      if(assets)h+='<button type="button" class="btn dark wide" data-act="pick" data-id="'+esc(v.id)+'" data-arg="'+esc(arg)+'">'+ic('up')+'Upload '+KIND[k]+'</button><div class="orline"><span>or add a link</span></div>';
+      h+='<div class="linkrow"><input id="f-link" type="url" placeholder="https://drive.google.com/…" aria-label="Link to the file"><button type="button" class="btn" data-act="addlink" data-id="'+esc(v.id)+'" data-arg="'+esc(arg)+'">Add link</button></div>'+(bigLink()?'<div class="row">'+bigLink()+'</div>':'')+'</div>';
+    }
+    h+='<p class="err" id="f-err" hidden></p><div class="dlgacts"><button type="button" class="btn" data-act="close">Close</button></div>';
+  }else if(kind==='instr'&&v){
+    h='<h2>Editing instructions · V'+esc(arg)+'</h2><p class="meta">'+esc(v.title)+'</p><label>Instructions for the editor<textarea id="f-instr" rows="7" maxlength="4000" placeholder="Hook, style, cuts, captions, call to action…">'+esc(instrOf(v,+arg||1))+'</textarea></label>'+acts('Save');
+  }else if(kind==='stats'&&v){
+    const n=x=>typeof x==='number'?x:'';
+    h='<h2>Update numbers</h2><p class="meta">'+esc(v.title)+'. Enter today’s numbers from Instagram. Each update adds a point to the trend.</p><div class="three">'+
+      '<label>Likes<input id="f-likes" type="number" min="0" step="1" inputmode="numeric" value="'+n(v.likes)+'"></label>'+
+      '<label>Comments<input id="f-comments" type="number" min="0" step="1" inputmode="numeric" value="'+n(v.comments)+'"></label>'+
+      '<label>Shares<input id="f-shares" type="number" min="0" step="1" inputmode="numeric" value="'+n(v.shares)+'"></label></div>'+acts('Save');
+  }else if((kind==='deliver'||kind==='resched')&&v){
+    const d=v.date||ymd(addDays(new Date(),1)),t=v.time||'18:00';
+    h='<h2>'+(kind==='resched'?'Change date and time':hasEdit(v)?'Upload new version':'Upload edited video')+'</h2><p class="meta">'+esc(v.title)+'</p>'+
+      (kind==='deliver'&&v.changeNote?'<p class="meta" style="color:var(--warn)">Changes requested: '+esc(v.changeNote)+'</p>':'');
+    if(kind==='deliver'){
+      if(assets)h+='<div><button type="button" class="btn wide" data-pick="f-editedfile">'+ic('up')+'Choose video (up to '+LIM+')</button><div class="picked" id="p-f-editedfile">No file chosen</div><input hidden id="f-editedfile" type="file" aria-label="Edited video file" accept="'+ACCEPT.edited+'"></div>';
+      h+='<label>'+(assets?'Or paste a link for larger files':'Edited video link')+'<input id="f-edited" type="url" placeholder="https://drive.google.com/…"></label>';
+    }
+    h+='<div class="two"><label>Instagram date<input id="f-date" type="date" required value="'+esc(d)+'"></label><label>Time<input id="f-time" type="time" required value="'+esc(t)+'"></label></div>'+
+      (kind==='deliver'?'<label>Note for the owner (optional)<input id="f-note" maxlength="200" placeholder="e.g. Used the second take, 42 seconds"></label>':'')+
+      acts(kind==='deliver'?'Upload and schedule':'Save');
+  }else if(kind==='reedit'&&v){
+    h='<h2>Request changes</h2><p class="meta">'+esc(v.title)+' goes back to the editor and comes off the calendar until a new version is uploaded.</p>'+
+      '<label>What should change?<textarea id="f-change" rows="4" maxlength="500" required placeholder="e.g. Shorten the intro, make the captions bigger"></textarea></label>'+acts('Send to editor');
+  }else return;
+  f.innerHTML=h;
+  const dlg=$('#dlg');if(!dlg.open)dlg.showModal();
+  const first=f.querySelector('input:not([hidden]),select,textarea');if(first&&kind!=='files')first.focus();
+}
+function closeDlg(){const d=$('#dlg');if(d.open)d.close();dlgKind=null;dlgId=null;dlgArg=null}
+function val(id){const e=document.getElementById(id);return e?e.value.trim():''}
+function formErr(m){const e=$('#f-err');if(e){e.textContent=m;e.hidden=false;e.style.color=''}const b=$('#dlgForm button[type=submit]');if(b)b.disabled=false}
+function busy(msg){const e=$('#f-err');if(e){e.textContent=msg;e.hidden=false;e.style.color='var(--muted)'}const b=$('#dlgForm button[type=submit]');if(b)b.disabled=true}
+function pickFiles(id,arg){
+  const [k,vs]=String(arg).split(':'),i=$('#rowPick');if(!KIND[k]||!assets)return openDlg('files',id,arg);
+  pickCtx={id,kind:k,ver:+vs||1};i.value='';i.accept=ACCEPT[k];i.multiple=k!=='script';i.click();
+}
+
+$('#dlgForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  if(dlgKind==='new-ws'){
+    const name=val('f-name');if(!name)return formErr('Enter a name for the client.');
+    const id=newId('w');await putWs(id,{name,createdAt:Date.now()});
+    curWs=id;LS.set('csc.ws',id);closeDlg();renderAll();
+  }else if(dlgKind==='renws'){
+    const name=val('f-name'),w=wsOf(dlgId);if(!name)return formErr('Enter a name for the client.');
+    closeDlg();if(w){const d=Object.assign({},w,{name});delete d.id;await putWs(w.id,d)}
+  }else if(dlgKind==='add'){
+    const title=val('f-title'),ws=val('f-ws'),notes=val('f-notes'),p=['instagram'];if($('#f-yt').checked)p.push('youtube');
+    if(!title)return formErr('Give the video a title.');
+    if(!ws)return formErr('Choose a client.');
+    const id=newId('v');closeDlg();await putVideo(id,{ws,title,files:[],platforms:p,notes,status:'raw',revision:1,srcVersions:1,createdAt:Date.now()});go('project',id);
+  }else if(dlgKind==='instr'){
+    const id=dlgId,ver=+dlgArg||1,v=videos.find(x=>x.id===id),text=val('f-instr');
+    closeDlg();if(v)await patchVideo(id,Object.assign({instr:Object.assign({},v.instr||{},{[ver]:text})},ver===1?{notes:text}:{}));
+  }else if(dlgKind==='stats'){
+    const id=dlgId,v=videos.find(x=>x.id===id),patch={};
+    for(const k of ['likes','comments','shares']){
+      const raw=val('f-'+k);if(raw===''){patch[k]=null;continue}
+      const n=Number(raw);if(!Number.isFinite(n)||n<0||Math.floor(n)!==n)return formErr('Enter whole numbers, 0 or more.');
+      patch[k]=n;
+    }
+    closeDlg();if(v){patch.metricLog=(v.metricLog||[]).concat([{at:Date.now(),likes:patch.likes,comments:patch.comments,shares:patch.shares}]).slice(-90);await patchVideo(id,patch)}
+  }else if(dlgKind==='reedit'){
+    const note=val('f-change'),id=dlgId;
+    if(!note)return formErr('Tell the editor what should change.');
+    closeDlg();await patchVideo(id,{status:'editing',changeNote:note,approved:false});
+  }else if(dlgKind==='deliver'||dlgKind==='resched'){
+    const date=val('f-date'),time=val('f-time'),id=dlgId,v=videos.find(x=>x.id===id);
+    if(!v)return closeDlg();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^\d{2}:\d{2}/.test(time))return formErr('Choose a date and time.');
+    const patch={date,time:time.slice(0,5)};
+    if(dlgKind==='deliver'){
+      const ed=val('f-edited'),note=val('f-note'),ef=document.getElementById('f-editedfile'),file=ef&&ef.files&&ef.files[0];
+      if(ed&&!safeUrl(ed))return formErr('Paste the full link, starting with https://');
+      if(!file&&!ed)return formErr(assets?'Choose the edited video to upload, or paste a link.':'Paste the full edited video link, starting with https://');
+      let up=null;
+      if(file&&assets){busy('Uploading video. Keep this window open.');try{up=await uploadOne(file,'edited')}catch(e){return formErr(e.msg||'The upload did not finish.')}}
+      const had=hasEdit(v),rev=v.revision||1;
+      if(had)patch.edits=(v.edits||[]).concat([{asset:v.editedAsset||'',url:v.editedUrl||'',name:v.editedName||'',size:v.editedSize||0,at:v.deliveredAt||0,editor:v.editor||'',rev}]);
+      Object.assign(patch,{editedUrl:ed,editedAsset:up?up.asset:'',editedName:up?up.name:'',editedSize:up?up.size:0,editorNote:note,changeNote:'',approved:false,status:'scheduled',editor:who(),revision:had?rev+1:rev,deliveredAt:Date.now()});
+    }
+    closeDlg();weekStart=monday(parseYmd(date));await patchVideo(id,patch);refreshUsage();renderAll();
+  }
+});
+
+document.addEventListener('click',async ev=>{
+  const pk=ev.target.closest('[data-pick]');if(pk){const i=document.getElementById(pk.dataset.pick);if(i)i.click();return}
+  const b=ev.target.closest('[data-act]');if(!b)return;
+  const act=b.dataset.act,id=b.dataset.id,v=id?videos.find(x=>x.id===id):null;
+  if(!['delete','delver','rmaccess','delws'].includes(act)&&armedDelete)armedDelete=null;
+  if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
+  else if(act==='stage'){curStage=b.dataset.stage;go('videos')}
+  else if(act==='ws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);curStage='all';go('videos')}
+  else if(act==='open')go('project',id);
+  else if(act==='asel'){anVideo=id;if(view!=='analytics')go('analytics');else renderAll()}
+  else if(act==='week'){const d=+b.dataset.d;weekStart=d?addDays(weekStart,d):monday(new Date());renderAll()}
+  else if(act==='mtab'){metricTab=b.dataset.tab;renderAll()}
+  else if(act==='close')closeDlg();
+  else if(['new-ws','add','deliver','resched','reedit','stats'].includes(act))openDlg(act,id);
+  else if(act==='linkonly')openDlg('files',id,b.dataset.arg);
+  else if(act==='files'||act==='instr')openDlg(act,id,b.dataset.arg);
+  else if(act==='pick')pickFiles(id,b.dataset.arg);
+  else if(act==='delver'&&v){
+    const k=+b.dataset.arg,key='ver:'+id+':'+k,n=srcN(v);
+    if(armedDelete!==key){armedDelete=key;renderAll();return}
+    armedDelete=null;if(n<2)return;
+    const gone=[],files=[];
+    (v.files||[]).forEach(f=>{const fv=f.ver||1;if(fv===k)gone.push(f.asset);else files.push(fv>k?Object.assign({},f,{ver:fv-1}):f)});
+    const instr={};for(let i=1;i<=n;i++){if(i===k)continue;const t=instrOf(v,i);if(t)instr[i>k?i-1:i]=t}
+    const patch={files,instr,notes:instr[1]||'',srcVersions:n-1};
+    if(k===1&&hasLegacy(v)){gone.push(v.rawAsset);Object.assign(patch,{rawAsset:'',rawUrl:'',rawName:''})}
+    else if(k===1){/* nothing else to clear */}
+    await patchVideo(id,patch);for(const a of gone)await dropAsset(a);refreshUsage();
+  }
+  else if(act==='signout'){if(CSC&&CSC.signOut)CSC.signOut()}
+  else if(act==='renws')openDlg('renws',id);
+  else if(act==='delws'){
+    if(armedDelete!=='ws:'+id){armedDelete='ws:'+id;renderAll();return}
+    armedDelete=null;if(videos.some(x=>x.ws===id))return;
+    if(db){try{await db.doc('workspaces/'+id).delete()}catch(e){fail(e)}}else{workspaces=workspaces.filter(w=>w.id!==id);renderAll()}
+  }
+  else if(act==='addaccess'){
+    const name=val('acName'),r=val('acRole'),ws=val('acWs'),e=$('#acErr');
+    const bad=!name?'Enter the person’s name.':(r==='client'&&!ws)?'Choose which client this person belongs to.':'';
+    if(bad){e.textContent=bad;e.hidden=false;return}
+    const abc='abcdefghjkmnpqrstuvwxyz23456789',rnd=crypto.getRandomValues(new Uint8Array(12));let code='';rnd.forEach(x=>{code+=abc[x%abc.length]});
+    $('#acName').value='';
+    try{await db.doc('access/'+newId('a')).set({name,role:r==='client'?'client':'editor',ws,code:code.slice(0,4)+'-'+code.slice(4,8)+'-'+code.slice(8),createdAt:Date.now()})}catch(x){fail(x)}
+  }
+  else if(act==='rmaccess'){
+    if(armedDelete!=='ac:'+id){armedDelete='ac:'+id;renderAll();return}
+    armedDelete=null;try{await db.doc('access/'+id).delete()}catch(x){fail(x)}
+  }
+  else if(act==='copycode'){const lab=b.textContent;try{await navigator.clipboard.writeText(b.dataset.arg);b.textContent='Copied'}catch(x){b.textContent='Select and copy'}setTimeout(()=>{if(b.isConnected)b.textContent=lab},1500)}
+  else if(act==='saveset'){
+    const u=val('upUrl').replace(/\/+$/,''),e=$('#setErr');
+    if(u&&!safeUrl(u)){e.textContent='Paste the full address, starting with https://';e.hidden=false;return}
+    appSettings=Object.assign({},appSettings,{uploaderUrl:u});
+    if(db){try{await db.doc('settings/app').set(appSettings)}catch(x){return fail(x)}}
+    b.textContent='Saved';lastHtml='';setTimeout(renderAll,900);
+  }
+  else if(act==='pickedit'){const i=$('#rowPick');pickCtx={id,kind:'edited'};i.value='';i.accept=ACCEPT.edited;i.multiple=false;i.click()}
+  else if(act==='dlall'&&v){
+    const ver=+b.dataset.arg||1,ms=materials(v);b.disabled=true;
+    for(let i=0;i<ms.length;i++){const m=ms[i];if((m.ver||1)!==ver||!okAsset(m.asset))continue;if(!(await doDownload(v,m.asset,m.kind+'-v'+ver+'-'+(i+1),m.name)))break}
+    b.disabled=false;
+  }
+  else if(act==='deliverinline'&&v){
+    const box=b.closest('.deliver'),g=c=>{const e=box.querySelector(c);return e?e.value.trim():''},err=box.querySelector('.err');
+    const date=g('.edDate'),time=g('.edTime'),ed=g('.edLink'),file=pendingEdit[id];
+    const say=(m,soft)=>{err.textContent=m;err.hidden=!m;err.style.color=soft?'var(--muted)':''};
+    if(ed&&!safeUrl(ed))return say('Paste the full link, starting with https://');
+    if(!file&&!ed)return say(assets?'Choose the edited video, or paste a link.':'Paste the edited video link.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^\d{2}:\d{2}/.test(time))return say('Choose a date and time.');
+    let up=null;b.disabled=true;
+    if(file&&assets){say('Uploading video. Keep this page open.',true);try{up=await uploadOne(file,'edited')}catch(e){b.disabled=false;return say(e.msg||'The upload did not finish.')}}
+    const had=hasEdit(v),rev=v.revision||1,patch={date,time:time.slice(0,5)};
+    if(had)patch.edits=(v.edits||[]).concat([{asset:v.editedAsset||'',url:v.editedUrl||'',name:v.editedName||'',size:v.editedSize||0,at:v.deliveredAt||0,editor:v.editor||'',rev}]);
+    Object.assign(patch,{editedUrl:ed,editedAsset:up?up.asset:'',editedName:up?up.name:'',editedSize:up?up.size:0,editorNote:'',changeNote:'',approved:false,status:'scheduled',editor:who(),revision:had?rev+1:rev,deliveredAt:Date.now()});
+    delete pendingEdit[id];const l=box.querySelector('.edLink');if(l)l.value='';
+    await patchVideo(id,patch);refreshUsage();
+  }
+  else if(act==='newver'&&v)await patchVideo(id,{srcVersions:srcN(v)+1});
+  else if(act==='approve')await patchVideo(id,{approved:true});
+  else if(act==='publish')await patchVideo(id,{status:'published',approved:true,publishedAt:Date.now()});
+  else if(act==='note'&&v){
+    const box=b.closest('.notesbox'),i=box?box.querySelector('.noteIn'):null,text=i?i.value.trim():'';if(!text)return;i.value='';
+    await patchVideo(id,{thread:(v.thread||[]).concat([{at:Date.now(),by:who(),role,text}]).slice(-100)});
+  }
+  else if(act==='sharev'&&v){
+    const w=wsOf(v.ws),ap=approval(v),text=v.title+(w?' ('+w.name+')':'')+'\nStatus: '+ap[1]+(isOut(v)?'\nInstagram: '+niceDate(v.date)+', '+niceTime(v.time):'')+(safeUrl(v.editedUrl)?'\nEdited video: '+v.editedUrl:'');
+    const lab=b.innerHTML;try{await navigator.clipboard.writeText(text);b.textContent='Copied'}catch(e){b.textContent='Copy not available here'}
+    setTimeout(()=>{if(b.isConnected)b.innerHTML=lab},1600);
+  }
+  else if(act==='addlink'&&v){
+    const u=val('f-link'),[k,vs]=String(b.dataset.arg).split(':');if(!safeUrl(u))return formErr('Paste the full link, starting with https://');
+    await patchVideo(id,{files:(v.files||[]).concat([{kind:k,ver:+vs||1,url:u,at:Date.now()}])});
+  }
+  else if(act==='rmfile'&&v){
+    const fi=+b.dataset.fi,off=hasLegacy(v)?1:0;
+    if(fi<off){const a=v.rawAsset;await patchVideo(id,{rawAsset:'',rawUrl:'',rawName:''});await dropAsset(a)}
+    else{const files=(v.files||[]).slice(),gone=files.splice(fi-off,1)[0];await patchVideo(id,{files});if(gone)await dropAsset(gone.asset)}
+    refreshUsage();
+  }
+  else if(act==='delete'){
+    if(armedDelete===id){armedDelete=null;go('videos');await delVideo(id);if(v){await dropAsset(v.rawAsset);await dropAsset(v.editedAsset);for(const f of (v.files||[]))await dropAsset(f.asset);for(const e of (v.edits||[]))await dropAsset(e.asset);refreshUsage()}}
+    else{armedDelete=id;renderAll()}
+  }
+  else if(act==='dl'&&v){
+    const fi=b.dataset.fi;
+    if(fi!=null){const m=materials(v)[+fi];if(m)await doDownload(v,m.asset,m.kind+'-v'+(m.ver||1)+'-'+(+fi+1),m.name,b)}
+    else await doDownload(v,v.editedAsset,'edited-v'+(v.revision||1),v.editedName,b);
+  }
+  else if(act==='dlprev'&&v){const p=(v.edits||[])[+b.dataset.fi];if(p)await doDownload(v,p.asset,'edited-v'+(p.rev||''),p.name,b)}
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='stageSel'){curStage=t.value;renderAll()}
+  else if((t.id==='roleSel'||t.id==='roleSel2')&&!CSC){role=t.value;LS.set('csc.role',role);renderAll()}
+  else if(t.id==='wsSel'){curWs=t.value;LS.set('csc.ws',curWs);if(view==='project')go('videos');else renderAll()}
+  else if(t.type==='file'&&t.id!=='rowPick'){const s=document.getElementById('p-'+t.id);if(s)s.textContent=t.files&&t.files[0]?t.files[0].name:'No file chosen'}
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='edName'){edName=e.target.value.trim();LS.set('csc.name',edName);$('#pname').textContent=who()}
+  else if(e.target.id==='q'){q=e.target.value.trim();if(view!=='videos'){curStage='all';go('videos')}else renderAll()}
+});
+document.addEventListener('keydown',async e=>{
+  if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('scriptIn')){
+    e.preventDefault();const t=e.target,text=t.value.trim(),ver=+t.dataset.ver||1,v=videos.find(x=>x.id===t.dataset.id);if(!text||!v)return;
+    await patchVideo(v.id,Object.assign({instr:Object.assign({},v.instr||{},{[ver]:text})},ver===1?{notes:text}:{}));return;
+  }
+});
+['dragover','dragleave','drop'].forEach(type=>document.addEventListener(type,async e=>{
+  const z=e.target.closest&&e.target.closest('[data-dz]');if(!z)return;
+  e.preventDefault();z.classList.toggle('over',type==='dragover');
+  if(type==='drop'&&e.dataTransfer&&e.dataTransfer.files.length){const [id,arg]=z.dataset.dz.split('|'),[k,vs]=arg.split(':');if(k==='edited')stageEdit(id,e.dataTransfer.files[0]);else await uploadFiles(id,k,+vs||1,e.dataTransfer.files)}
+}));
+document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
+function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
+$('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
+$('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDlg()});
+window.addEventListener('hashchange',()=>{readHash();renderAll()});
+
+/* ---------- boot ---------- */
+readHash();if(!role)role='owner';renderAll();
+(async function(){
+  const c=window.claude;
+  if(c&&c.use){
+    try{
+      db=await c.use('db');
+      try{assets=await c.use('assets')}catch(e){assets=null}
+      try{downloads=await c.use('downloads')}catch(e){downloads=null}
+      const user=await c.use('user');
+      if(user){
+        const w=await user.can('data.write');if(w===false){canWrite=false;notice('You have view-only access to this workspace.')}
+        if(CSC&&CSC.me){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
+        try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
+          if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
+      }
+    }catch(e){db=null}
+  }
+  if(!db){wsLoaded=vidLoaded=true;notice('Saving is not available in this view, so changes stay on this screen only. Sign in to Claude to save and share them.');renderAll();return}
+  renderAll();refreshUsage();
+  const onErr=()=>notice('The live connection stopped. Reload the page to reconnect.');
+  db.collection('workspaces').onSnapshot(s=>{workspaces=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));wsLoaded=true;renderAll()},onErr);
+  if(CSC&&isAdmin())db.collection('access').onSnapshot(s=>{access=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));renderAll()},()=>{});
+  db.doc('settings/app').onSnapshot(d=>{appSettings=d.exists?Object.assign({},d.data()):{};renderAll()},()=>{});
+  db.collection('videos').onSnapshot(s=>{videos=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));vidLoaded=true;renderAll()},onErr);
+})();
+})();
+</script>
+</body></html>

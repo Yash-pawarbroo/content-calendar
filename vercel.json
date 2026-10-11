@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/_blob/:id",
+      "destination": "https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev/_blob/:id",
+      "permanent": false
+    },
+    {
+      "source": "/upload",
+      "destination": "https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev/upload",
+      "permanent": false
+    }
+  ]
+}
