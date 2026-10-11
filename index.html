@@ -396,6 +396,8 @@ div.trow.advrow{cursor:default}
 .pv video,.pv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center;display:block;background:#17140f}
 .pv.tall{aspect-ratio:1/1}
 .pv.bad video{display:none}
+.pv.nopic::after,.fullpv.nopic::after{content:'This browser can’t show the picture for this file (usually an iPhone HEVC video). The sound plays. Download it to watch, or open the site in Safari.';position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:min(250px,80%);color:#e9e2d5;font-size:.84rem;text-align:center;pointer-events:none}
+.fullpv{position:relative}
 .pv.bad::before{content:'This file type can’t be previewed in the browser. Download it to watch.';color:#d9d2c5;font-size:.86rem;text-align:center;padding:16px;max-width:260px}
 .mini video,.mini img{object-fit:cover;object-position:center}
 .pvnone{display:flex;flex-direction:column;align-items:center;gap:8px;color:#d9d2c5;padding:14px;text-align:center;overflow-wrap:anywhere}
@@ -1328,6 +1330,7 @@ document.addEventListener('keydown',async e=>{
 }));
 document.addEventListener('loadedmetadata',e=>{const t=e.target,p=t.closest&&t.closest('.pv');if(p&&t.tagName==='VIDEO'){p.classList.toggle('tall',t.videoHeight>t.videoWidth);if(!t.videoWidth)p.classList.add('bad')}},true);
 document.addEventListener('error',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest('.pv');if(p)p.classList.add('bad')},true);
+document.addEventListener('timeupdate',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest&&t.closest('.pv,.fullpv');if(!p||t.paused||t.currentTime<0.6||p.classList.contains('nopic'))return;let n=1;try{n=t.getVideoPlaybackQuality?t.getVideoPlaybackQuality().totalVideoFrames:(t.webkitDecodedFrameCount==null?1:t.webkitDecodedFrameCount)}catch(x){}if(n===0)p.classList.add('nopic')},true);
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('pplWs')&&CSC)CSC.userUpdate({id:t.dataset.id,ws:t.value}).then(loadPeople,pplErr)});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^auth(Name|Brand|Email|Pw)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="authgo"]');if(b)b.click();return}if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
