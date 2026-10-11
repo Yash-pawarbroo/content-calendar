@@ -399,7 +399,7 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
       <div class="crumbs" id="crumbs"></div>
       <div class="search"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" class="field" type="search" placeholder="Search videos, clients…" aria-label="Search videos and clients"></div>
       <div class="profile"><img class="avatar" id="avatar" alt="" hidden><div><div class="pname" id="pname">You</div>
-        <select class="prole" id="roleSel" aria-label="View as"><option value="owner">Owner</option><option value="editor">Editor</option></select><div class="prole" id="roleTxt" hidden></div></div><button class="btn sm" id="signOut" data-act="signout" hidden>Sign out</button></div>
+        <select class="prole" id="roleSel" aria-label="View as"><option value="owner">Owner view</option><option value="editor">Editor view</option></select><div class="prole" id="roleTxt" hidden></div></div><button class="btn sm" id="signOut" data-act="signout" hidden>Sign out</button></div>
     </div>
     <p class="hosted" id="hosted" hidden></p>
     <p class="notice" id="notice" hidden></p>
@@ -609,7 +609,7 @@ function renderTop(){
   $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Clients',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
-  if(CSC){const g=isGuest();$('#roleSel').hidden=!g;const rt=$('#roleTxt');rt.hidden=g;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
+  if(CSC){const g=isGuest(),sw=g||(CSC.me&&CSC.me.role==='owner');$('#roleSel').hidden=!sw;const rt=$('#roleTxt');rt.hidden=sw;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
 }
 
 /* ---------- views ---------- */
@@ -880,7 +880,7 @@ function vSignIn(){
 function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
   return '<div class="pagehead"><h2 class="ptitle">Settings</h2></div><div class="grid2"><section class="card"><span class="ctitle">Profile</span><label class="meta" for="edName">Name shown on uploads and notes</label><input id="edName" class="field" maxlength="40" placeholder="'+esc(profileName||'Your name')+'" value="'+esc(edName)+'">'+
-    (CSC&&!isGuest()?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
+    (CSC&&!isGuest()&&!isAdmin()?'<p class="meta">Signed in as '+esc(roleLabel())+'.</p>':'<label class="meta" for="roleSel2">View as</label><select id="roleSel2" class="field" style="max-width:none"><option value="owner"'+(role==='owner'?' selected':'')+'>Owner</option><option value="editor"'+(role==='editor'?' selected':'')+'>Editor</option></select>')+'</section>'+
     '<section class="card"><span class="ctitle">Connections</span><div class="row">'+ic('insta')+'<b>Instagram</b><span class="badge">Not connected</span></div><p class="meta">Automatic likes, comments, shares and comment feeds need an Instagram connection, which this prototype does not have. Numbers are entered by hand.</p>'+
     '<span class="ctitle">Large files</span><label class="meta" for="upUrl">Address of your large-file upload page. When set, an “Upload a large file” button appears next to every link box.</label>'+
     (isOwner()?'<div class="row" style="flex-wrap:nowrap"><input id="upUrl" class="field grow" type="url" placeholder="https://…workers.dev" value="'+esc(appSettings.uploaderUrl||'')+'"><button class="btn" data-act="saveset">Save</button></div><p class="err" id="setErr" hidden></p>':'<p class="meta">'+(safeUrl(appSettings.uploaderUrl)?esc(appSettings.uploaderUrl):'Not set up yet.')+'</p>')+
@@ -1164,7 +1164,7 @@ document.addEventListener('click',async ev=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='stageSel'){curStage=t.value;renderAll()}
-  else if((t.id==='roleSel'||t.id==='roleSel2')&&(!CSC||isGuest())){role=t.value;LS.set('csc.role',role);renderAll()}
+  else if((t.id==='roleSel'||t.id==='roleSel2')&&(!CSC||isGuest()||isAdmin())){role=t.value;LS.set('csc.role',role);renderAll()}
   else if(t.id==='wsSel'){curWs=t.value;LS.set('csc.ws',curWs);if(view==='project')go('videos');else renderAll()}
   else if(t.type==='file'&&t.id!=='rowPick'){const s=document.getElementById('p-'+t.id);if(s)s.textContent=t.files&&t.files[0]?t.files[0].name:'No file chosen'}
 });
@@ -1201,7 +1201,7 @@ readHash();if(!role)role='owner';renderAll();
       const user=await c.use('user');
       if(user){
         const w=await user.can('data.write');if(w===false){canWrite=false;if(!CSC)notice('You have view-only access to this workspace.')}
-        if(CSC&&CSC.me&&CSC.me.role!=='guest'){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
+        if(CSC&&CSC.me&&CSC.me.role!=='guest'&&CSC.me.role!=='owner'){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
         try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
           if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
       }
