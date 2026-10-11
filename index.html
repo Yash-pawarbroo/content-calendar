@@ -404,6 +404,18 @@ div.trow.advrow{cursor:default}
 .pv.bad video{display:none}
 .pv.nopic::after,.fullpv.nopic::after{content:'This browser can’t show the picture for this file (usually an iPhone HEVC video). The sound plays. Download it to watch, or open the site in Safari.';position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:min(250px,80%);color:#e9e2d5;font-size:.84rem;text-align:center;pointer-events:none}
 .fullpv{position:relative}
+.preview{position:relative}
+.cplayer{position:absolute;inset:0;background:#17140f;overflow:hidden}
+.fullpv .cplayer{position:relative;inset:auto;width:100%;height:68vh}
+.cplayer canvas{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;cursor:pointer}
+.cplayer:fullscreen{width:100vw;height:100vh;background:#000}
+.cmsg{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);width:min(260px,80%);color:#e9e2d5;font-size:.86rem;text-align:center;pointer-events:none}
+.cbar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:18px 10px 8px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.72));color:#fff}
+.cbtn{flex:none;width:30px;height:30px;border:0;border-radius:8px;background:none;color:#fff;display:grid;place-items:center;padding:0}
+.cbtn:hover{background:rgba(255,255,255,.16)}
+.ctime{flex:none;font-size:.78rem}
+.cseek{flex:1;min-width:40px;height:4px;accent-color:#fff;cursor:pointer}
+.pv .cplayer~.pvfull{top:10px}
 .pv.bad::before{content:'This file type can’t be previewed in the browser. Download it to watch.';color:#d9d2c5;font-size:.86rem;text-align:center;padding:16px;max-width:260px}
 .mini video,.mini img{object-fit:cover;object-position:center}
 .pvnone{display:flex;flex-direction:column;align-items:center;gap:8px;color:#d9d2c5;padding:14px;text-align:center;overflow-wrap:anywhere}
@@ -599,8 +611,50 @@ function paintThumbs(){
     if(el.dataset.big){const p=el.closest('.pv');if(p)p.classList.toggle('tall',c.height>c.width)}
   });
 }
-try{new MutationObserver(()=>{if(thumbRaf)return;thumbRaf=requestAnimationFrame(()=>{thumbRaf=0;paintThumbs()})}).observe(document.body,{childList:true,subtree:true})}catch(e){}
-function stopPreviews(){document.querySelectorAll('.pv>video').forEach(x=>{const p=x.closest('.pv'),b=p.querySelector('.pvposter');try{x.pause();x.removeAttribute('src');x.load()}catch(e){}x.remove();p.classList.remove('nopic','bad');if(b)b.hidden=false})}
+try{new MutationObserver(()=>{if(thumbRaf)return;thumbRaf=requestAnimationFrame(()=>{thumbRaf=0;paintThumbs();mountPlayers()})}).observe(document.body,{childList:true,subtree:true})}catch(e){}
+/* Player that paints the video onto a canvas. Some computers show a black picture for iPhone (HEVC/HDR) clips in the browser's own player while decoding them fine, and painting the frames ourselves avoids that. */
+const players=new Set();
+const PI={play:'<path d="M8 5v14l11-7z"/>',pause:'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>',vol:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8.500a4.500 4.500 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',mute:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="m16.500 9.500 5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'};
+function pic(n){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+PI[n]+'</svg>'}
+function fmtT(x){x=Math.max(0,Math.floor(x||0));return Math.floor(x/60)+':'+String(x%60).padStart(2,'0')}
+function mountPlayer(root,asset,auto){
+  const v=document.createElement('video'),c=document.createElement('canvas'),ctx=c.getContext('2d'),P={root,dead:false};
+  root.classList.add('cplayer');root.textContent='';
+  const msg=document.createElement('div');msg.className='cmsg';msg.textContent='Loading…';
+  const bar=document.createElement('div');bar.className='cbar';
+  bar.innerHTML='<button type="button" class="cbtn" data-c="play" aria-label="Play or pause"></button><span class="ctime num">0:00 / 0:00</span><input class="cseek" type="range" min="0" max="1000" value="0" aria-label="Seek"><button type="button" class="cbtn" data-c="mute" aria-label="Mute or unmute"></button><button type="button" class="cbtn" data-c="fs" aria-label="Full screen">'+ic('full',16)+'</button>';
+  root.append(c,msg,bar);
+  const playB=bar.querySelector('[data-c=play]'),muteB=bar.querySelector('[data-c=mute]'),seek=bar.querySelector('.cseek'),time=bar.querySelector('.ctime');
+  let seeking=false,raf=0;
+  const ui=()=>{playB.innerHTML=pic(v.paused||v.ended?'play':'pause');muteB.innerHTML=pic(v.muted?'mute':'vol');time.textContent=fmtT(v.currentTime)+' / '+fmtT(v.duration);if(!seeking&&v.duration)seek.value=Math.round(v.currentTime/v.duration*1000)};
+  const draw=()=>{
+    if(P.dead||!v.videoWidth)return;
+    if(c.dataset.w!==String(v.videoWidth)){const k=Math.min(1,1920/Math.max(v.videoWidth,v.videoHeight));c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);c.dataset.w=String(v.videoWidth);const pv=root.closest('.pv');if(pv)pv.classList.toggle('tall',c.height>c.width)}
+    try{ctx.drawImage(v,0,0,c.width,c.height);msg.hidden=true}catch(e){}
+  };
+  const loop=()=>{raf=0;if(P.dead)return;draw();ui();if(!v.paused&&!v.ended)raf=requestAnimationFrame(loop)};
+  const kick=()=>{if(!raf)raf=requestAnimationFrame(loop)};
+  const toggle=()=>{if(v.paused||v.ended)v.play().catch(()=>{});else v.pause()};
+  ['play','playing','pause','ended','loadedmetadata','loadeddata','seeked','timeupdate','volumechange'].forEach(n=>v.addEventListener(n,kick));
+  v.addEventListener('waiting',()=>{if(!v.videoWidth){msg.textContent='Loading…';msg.hidden=false}});
+  v.addEventListener('error',()=>{msg.textContent='This video can’t be played in this browser. Download it to watch.';msg.hidden=false});
+  playB.onclick=toggle;c.onclick=toggle;
+  muteB.onclick=()=>{v.muted=!v.muted;ui()};
+  seek.oninput=()=>{seeking=true;if(v.duration)v.currentTime=seek.value/1000*v.duration};
+  seek.onchange=()=>{seeking=false};
+  bar.querySelector('[data-c=fs]').onclick=()=>{try{if(document.fullscreenElement)document.exitFullscreen();else (root.requestFullscreen||root.webkitRequestFullscreen).call(root)}catch(e){}};
+  P.destroy=()=>{if(P.dead)return;P.dead=true;try{v.pause();v.removeAttribute('src');v.load()}catch(e){}players.delete(P)};
+  players.add(P);ui();
+  v.playsInline=true;v.preload='auto';v.src='/_blob/'+asset;
+  if(auto)v.play().catch(()=>ui());
+  return P;
+}
+try{document.getElementById('dlg').addEventListener('close',()=>{const d=document.getElementById('dlg');players.forEach(P=>{if(d.contains(P.root))P.destroy()})})}catch(e){}
+function mountPlayers(){
+  players.forEach(P=>{if(!P.root.isConnected)P.destroy()});
+  document.querySelectorAll('[data-player]:not(.cplayer)').forEach(el=>{if(el.dataset.auto)stopPreviews();mountPlayer(el,el.dataset.player,!!el.dataset.auto)});
+}
+function stopPreviews(){players.forEach(P=>{const box=P.root.closest('.pv,.preview');P.destroy();if(box){const b=box.querySelector('.pvposter');P.root.remove();box.classList.remove('nopic','bad');if(b)b.hidden=false}})}
 function notice(msg){const n=$('#notice');n.textContent=msg||'';n.hidden=!msg}
 function fail(e){if(e&&e.code==='invalid_argument'){canWrite=false;notice('You have view-only access to this workspace.');renderAll()}else notice('That change could not be saved. Please try again.')}
 async function putVideo(id,data){
@@ -844,7 +898,7 @@ function talkCol(v){
 function editCol(v){
   const id=esc(v.id),owner=isOwner(),editor=isEditor(),has=hasEdit(v),ap=approval(v),out=isOut(v);
   let pv;
-  if(okAsset(v.editedAsset))pv='<div class="preview"><video src="/_blob/'+esc(v.editedAsset)+'" controls preload="metadata" playsinline></video></div>';
+  if(okAsset(v.editedAsset))pv='<div class="preview">'+'<button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(v.editedAsset)+'" aria-label="Play video"><span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button>'+'</div>';
   else if(safeUrl(v.editedUrl))pv='<a class="preview" style="text-decoration:none" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener"><span style="display:flex;flex-direction:column;align-items:center;gap:6px">'+ic('link',22)+'<b style="color:var(--blue)">Open edited video ↗</b><span class="meta">'+esc(hostOf(v.editedUrl))+'</span></span></a>';
   else pv='<div class="preview"><span style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px">'+ic('video',22)+'<span>No edited video yet</span></span></div>';
   let h='<section class="card"><div class="chead"><span class="ctitle">Edited video</span>'+(has?'<span class="badge num">v'+(v.revision||1)+'</span>':'')+'</div>'+pv;
@@ -1101,7 +1155,7 @@ function openDlg(kind,id,arg){
   }else if(kind==='view'&&v){
     const m=materials(v)[+arg];if(!m)return;const k=mediaKind(m);
     h='<h2 style="overflow-wrap:anywhere">'+esc(m.name||KIND[m.kind])+'</h2><p class="meta">'+esc(v.title)+' · '+KIND[m.kind]+' · V'+(m.ver||1)+[fmtSize(m.size),m.at?dayOf(m.at):''].filter(Boolean).map(x=>' · '+x).join('')+'</p>'+
-      '<div class="fullpv">'+(k==='video'?'<video src="/_blob/'+esc(m.asset)+'" controls autoplay playsinline></video>':k==='image'?'<img src="/_blob/'+esc(m.asset)+'" alt="">':'')+'</div>'+
+      '<div class="fullpv">'+(k==='video'?'<div data-player="'+esc(m.asset)+'" data-auto="1"></div>':k==='image'?'<img src="/_blob/'+esc(m.asset)+'" alt="">':'')+'</div>'+
       '<div class="dlgacts"><button type="button" class="btn" data-act="close">Close</button><button type="button" class="btn dark" data-act="dl" data-id="'+esc(v.id)+'" data-fi="'+(+arg)+'">'+ic('down')+'Download</button></div>';
   }else if(kind==='instr'&&v){
     h='<h2>Editing instructions · V'+esc(arg)+'</h2><p class="meta">'+esc(v.title)+'</p><label>Instructions for the editor<textarea id="f-instr" rows="7" maxlength="4000" placeholder="Hook, style, cuts, captions, call to action…">'+esc(instrOf(v,+arg||1))+'</textarea></label>'+acts('Save');
@@ -1130,7 +1184,7 @@ function openDlg(kind,id,arg){
   const dlg=$('#dlg');dlg.classList.toggle('wide',kind==='view');if(!dlg.open)dlg.showModal();
   const first=f.querySelector('input:not([hidden]),select,textarea');if(first&&kind!=='files')first.focus();
 }
-function closeDlg(){const d=$('#dlg');const pvv=d.querySelector('video');if(pvv){try{pvv.pause()}catch(e){}}if(d.open)d.close();dlgKind=null;dlgId=null;dlgArg=null}
+function closeDlg(){const d=$('#dlg');players.forEach(P=>{if(d.contains(P.root))P.destroy()});if(d.open)d.close();dlgKind=null;dlgId=null;dlgArg=null}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():''}
 function formErr(m){const e=$('#f-err');if(e){e.textContent=m;e.hidden=false;e.style.color=''}const b=$('#dlgForm button[type=submit]');if(b)b.disabled=false}
 function busy(msg){const e=$('#f-err');if(e){e.textContent=msg;e.hidden=false;e.style.color='var(--muted)'}const b=$('#dlgForm button[type=submit]');if(b)b.disabled=true}
@@ -1230,7 +1284,7 @@ document.addEventListener('click',async ev=>{
     b.disabled=true;e.hidden=true;
     try{if(authMode==='signup')await CSC.signup(CSC.join?{email,password:pw,join:CSC.join}:{email,password:pw});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
   }
-  else if(act==='playpv'){stopPreviews();const pv=b.closest('.pv'),x=document.createElement('video');b.hidden=true;x.controls=true;x.autoplay=true;x.playsInline=true;x.src='/_blob/'+b.dataset.asset;pv.insertBefore(x,pv.firstChild)}
+  else if(act==='playpv'){stopPreviews();const box=b.closest('.pv,.preview'),d=document.createElement('div');b.hidden=true;box.insertBefore(d,box.firstChild);mountPlayer(d,b.dataset.asset,true)}
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
   else if(act==='cpinvite')await copyInvite(id||'',false);
