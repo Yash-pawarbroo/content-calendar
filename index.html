@@ -759,12 +759,12 @@ function srcCard(v,ver,latest){
   if(sc.length===1&&okAsset(sc[0].m.asset))acts+='<button class="btn sm" data-act="dl" data-id="'+id+'" data-fi="'+sc[0].i+'">'+ic('down',14)+'Script file</button>';
   else if(sc.length)acts+='<button class="btn sm" data-act="files" data-id="'+id+'" data-arg="'+arg+'">'+ic('file',14)+'Script files</button>';
   if(owner)acts+='<button class="btn sm" data-act="pick" data-id="'+id+'" data-arg="'+arg+'">'+ic('up',14)+'Upload file</button>'+(ins?'<button class="btn sm" data-act="instr" data-id="'+id+'" data-arg="'+ver+'">'+ic('edit',14)+'Edit</button>':'');
-  return '<section class="card"><div class="chead"><div class="row"><span class="vnum">V'+ver+'</span><span class="badge'+(latest?' blue':'')+'">'+(latest?'Latest':ver===1?'Original':'Revision')+'</span></div><div class="row"><span class="meta">'+(last?'Uploaded '+dayOf(last):'')+'</span>'+
+  return '<section class="card"><div class="chead"><div class="row"><span class="vnum">Video '+ver+'</span><span class="badge'+(latest?' blue':'')+'">'+(latest?'Latest':ver===1?'Original':'Revision')+'</span></div><div class="row"><span class="meta">'+(last?'Uploaded '+dayOf(last):'')+'</span>'+
     (all.filter(m=>okAsset(m.asset)).length>1?'<button class="btn sm" data-act="dlall" data-id="'+id+'" data-arg="'+ver+'">'+ic('down',14)+'Download all</button>':'')+
-    (owner&&srcN(v)>1?(armedDelete==='ver:'+v.id+':'+ver?'<button class="btn sm danger" data-act="delver" data-id="'+id+'" data-arg="'+ver+'">Delete V'+ver+'?</button>':'<button class="btn sm sq" data-act="delver" data-id="'+id+'" data-arg="'+ver+'" aria-label="Delete version '+ver+'" title="Delete version '+ver+'">'+ic('trash',14)+'</button>'):'')+'</div></div>'+
+    (owner&&srcN(v)>1?(armedDelete==='ver:'+v.id+':'+ver?'<button class="btn sm danger" data-act="delver" data-id="'+id+'" data-arg="'+ver+'">Delete V'+ver+'?</button>':'<button class="btn sm sq" data-act="delver" data-id="'+id+'" data-arg="'+ver+'" aria-label="Delete video '+ver+'" title="Delete video '+ver+'">'+ic('trash',14)+'</button>'):'')+'</div></div>'+
     '<div class="zones">'+srcTile(v,ver,'aroll')+srcTile(v,ver,'broll')+'</div>'+
     '<div class="zonewrap"><div class="zlabel caps"><span>SCRIPT</span>'+(sc.length?'<span class="meta">'+fileSummary(sc)+'</span>':'')+'</div>'+
-    (ins?'<div class="instr glass">'+esc(ins)+'</div>':owner?'<input class="field scriptIn" data-id="'+id+'" data-ver="'+ver+'" maxlength="4000" placeholder="Paste your video script here, then press Enter" aria-label="Script for version '+ver+'">':'<div class="meta">No script yet.</div>')+
+    (ins?'<div class="instr glass">'+esc(ins)+'</div>':owner?'<input class="field scriptIn" data-id="'+id+'" data-ver="'+ver+'" maxlength="4000" placeholder="Paste your video script here, then press Enter" aria-label="Script for video '+ver+'">':'<div class="meta">No script yet.</div>')+
     (acts?'<div class="row">'+acts+'</div>':'')+'</div></section>';
 }
 function chartHtml(v){
@@ -837,7 +837,7 @@ function projectBlock(v,single){
     '<div class="row"><button class="btn" data-act="asel" data-id="'+id+'">'+ic('chart')+'Analytics &amp; edit</button><button class="btn" data-act="sharev" data-id="'+id+'">'+ic('share')+'Copy summary</button>'+
     (isAdmin()?(armedDelete===v.id?'<button class="btn danger" data-act="delete" data-id="'+id+'">Delete video?</button>':'<button class="btn sq" data-act="delete" data-id="'+id+'" aria-label="Delete video" title="Delete video">'+ic('trash')+'</button>'):'')+pri+'</div></div><div class="pgrid"><div class="col">';
   for(let i=1;i<=n;i++)h+=srcCard(v,i,i===n);
-  if(owner)h+='<button class="btn wide" data-act="newver" data-id="'+id+'">'+ic('plus')+'Add version '+(n+1)+'</button>';
+  if(owner)h+='<button class="btn wide" data-act="newver" data-id="'+id+'">'+ic('plus')+'Add video '+(n+1)+'</button>';
   return h+'</div><div class="rcol">'+deliverCard(v)+noteCard(v)+'</div></div>';
 }
 function deliverCard(v){
