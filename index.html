@@ -375,6 +375,20 @@ div.trow.advrow{cursor:default}
 .hosted{margin:12px 28px 0;background:var(--ink);color:#fff;border-radius:10px;padding:10px 14px}
 .hosted a{color:#fff;font-weight:600}
 @media (max-width:860px){.hosted{margin-inline:16px}}
+
+/* uploaded files: large preview with a full view */
+.pv{position:relative;aspect-ratio:16/9;width:100%;border-radius:10px;overflow:hidden;background:#17140f;display:grid;place-items:center}
+.pv video,.pv img{width:100%;height:100%;object-fit:contain;display:block;background:#17140f}
+.pvnone{display:flex;flex-direction:column;align-items:center;gap:8px;color:#d9d2c5;padding:14px;text-align:center;overflow-wrap:anywhere}
+.pvcount{position:absolute;left:10px;top:10px;background:rgba(23,20,15,.72);color:#fff;border-radius:7px;padding:2px 8px;font-size:.76rem;font-weight:600}
+.pvfull{position:absolute;right:10px;top:10px;width:32px;height:32px;border:0;border-radius:8px;background:rgba(23,20,15,.72);color:#fff;display:grid;place-items:center}
+.pvfull:hover{background:#17140f}
+.strip{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.strip .mini{border:0;padding:0;width:44px;height:44px}
+.strip .mini:hover{outline:2px solid var(--ink)}
+dialog.wide{width:min(980px,calc(100vw - 32px))}
+.fullpv{background:#17140f;border-radius:12px;overflow:hidden;display:grid;place-items:center}
+.fullpv video,.fullpv img{display:block;max-width:100%;max-height:68vh;width:100%;object-fit:contain}
 </style>
 
 <div class="app">
@@ -427,6 +441,7 @@ const IC={
   file:'<path d="M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6"/>',
   cam:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>',
   back:'<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  full:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   check:'<path d="m5 12 5 5 9-10"/>',
   link:'<path d="M10 14a4 4 0 0 0 5.500 0l3-3a4 4 0 0 0-5.500-5.500l-1 1M14 10a4 4 0 0 0-5.500 0l-3 3a4 4 0 0 0 5.500 5.500l1-1"/>',
@@ -657,7 +672,8 @@ function srcTile(v,ver,kind){
   let h='<div class="zonewrap"><div class="zlabel"><span>'+KIND[kind]+'</span>'+(list.length?'<span class="meta">'+fileSummary(list)+'</span>':'')+'</div>';
   if(!list.length)h+=owner?'<button class="drop" data-act="pick" data-id="'+id+'" data-arg="'+arg+'"'+dz+'>'+ic('down',20)+'<b>Upload '+KIND[kind]+'</b><span class="meta">'+FMT[kind]+'</span></button><button class="btn sm" style="align-self:flex-start" data-act="linkonly" data-id="'+id+'" data-arg="'+arg+'">'+ic('link',14)+'Add a link instead</button>'
     :'<div class="drop off">'+ic('cam',20)+'<span class="meta">No '+KIND[kind]+' yet</span></div>';
-  else h+='<div class="drop has"'+dz+'>'+list.slice(0,4).map(fileRow.bind(null,v)).join('')+'<div class="row">'+
+  else h+='<div class="drop has"'+dz+'>'+bigPreview(v,list[0],list.length)+fileRow(v,list[0])+
+    (list.length>1?'<div class="strip">'+list.slice(1,7).map(x=>'<button class="mini" data-act="view" data-id="'+id+'" data-arg="'+x.i+'" aria-label="View '+esc(x.m.name||'file')+'">'+thumbInner(x.m)+'</button>').join('')+(list.length>7?'<span class="meta">+'+(list.length-7)+'</span>':'')+'</div>':'')+'<div class="row">'+
     (list.length>4||owner?'<button class="btn sm" data-act="files" data-id="'+id+'" data-arg="'+arg+'">'+ic('folder',14)+(list.length>4?'All '+list.length+' files':'Manage')+'</button>':'')+
     (owner?'<button class="btn sm" data-act="pick" data-id="'+id+'" data-arg="'+arg+'">'+ic('up',14)+'Add</button>':'')+'</div></div>';
   return h+'</div>';
@@ -667,6 +683,15 @@ function thumbInner(m){
   if(okAsset(m.asset)&&['png','jpg','jpeg','webp','gif'].includes(e))return '<img src="/_blob/'+esc(m.asset)+'" alt="" loading="lazy">';
   if(okAsset(m.asset)&&VID.includes(e))return '<video src="/_blob/'+esc(m.asset)+'#t=0.1" preload="metadata" muted playsinline></video>';
   return ic(m.url&&!okAsset(m.asset)?'link':'file',16);
+}
+function mediaKind(m){const e=extOf(m.name);return !okAsset(m.asset)?'':VID.includes(e)?'video':['png','jpg','jpeg','webp','gif'].includes(e)?'image':''}
+function bigPreview(v,x,count){
+  const m=x.m,k=mediaKind(m),id=esc(v.id);
+  let inner;
+  if(k==='video')inner='<video src="/_blob/'+esc(m.asset)+'#t=0.1" preload="metadata" controls playsinline></video>';
+  else if(k==='image')inner='<img src="/_blob/'+esc(m.asset)+'" alt="'+esc(m.name||'')+'" loading="lazy">';
+  else inner='<span class="pvnone">'+ic(safeUrl(m.url)&&!okAsset(m.asset)?'link':'file',26)+'<span>'+esc(m.name||(m.url?hostOf(m.url):'File'))+'</span></span>';
+  return '<div class="pv">'+inner+(count>1?'<span class="pvcount">'+count+' files</span>':'')+(k?'<button class="pvfull" data-act="view" data-id="'+id+'" data-arg="'+x.i+'" aria-label="Full view" title="Full view">'+ic('full',16)+'</button>':'')+'</div>';
 }
 function fileRow(v,x){
   const m=x.m,nm=m.name||(m.url?hostOf(m.url):KIND[m.kind]);
@@ -923,6 +948,11 @@ function openDlg(kind,id,arg){
       h+='<div class="linkrow"><input id="f-link" type="url" placeholder="https://drive.google.com/…" aria-label="Link to the file"><button type="button" class="btn" data-act="addlink" data-id="'+esc(v.id)+'" data-arg="'+esc(arg)+'">Add link</button></div>'+(bigLink()?'<div class="row">'+bigLink()+'</div>':'')+'</div>';
     }
     h+='<p class="err" id="f-err" hidden></p><div class="dlgacts"><button type="button" class="btn" data-act="close">Close</button></div>';
+  }else if(kind==='view'&&v){
+    const m=materials(v)[+arg];if(!m)return;const k=mediaKind(m);
+    h='<h2 style="overflow-wrap:anywhere">'+esc(m.name||KIND[m.kind])+'</h2><p class="meta">'+esc(v.title)+' · '+KIND[m.kind]+' · V'+(m.ver||1)+[fmtSize(m.size),m.at?dayOf(m.at):''].filter(Boolean).map(x=>' · '+x).join('')+'</p>'+
+      '<div class="fullpv">'+(k==='video'?'<video src="/_blob/'+esc(m.asset)+'" controls autoplay playsinline></video>':k==='image'?'<img src="/_blob/'+esc(m.asset)+'" alt="">':'')+'</div>'+
+      '<div class="dlgacts"><button type="button" class="btn" data-act="close">Close</button><button type="button" class="btn dark" data-act="dl" data-id="'+esc(v.id)+'" data-fi="'+(+arg)+'">'+ic('down')+'Download</button></div>';
   }else if(kind==='instr'&&v){
     h='<h2>Editing instructions · V'+esc(arg)+'</h2><p class="meta">'+esc(v.title)+'</p><label>Instructions for the editor<textarea id="f-instr" rows="7" maxlength="4000" placeholder="Hook, style, cuts, captions, call to action…">'+esc(instrOf(v,+arg||1))+'</textarea></label>'+acts('Save');
   }else if(kind==='stats'&&v){
@@ -947,10 +977,10 @@ function openDlg(kind,id,arg){
       '<label>What should change?<textarea id="f-change" rows="4" maxlength="500" required placeholder="e.g. Shorten the intro, make the captions bigger"></textarea></label>'+acts('Send to editor');
   }else return;
   f.innerHTML=h;
-  const dlg=$('#dlg');if(!dlg.open)dlg.showModal();
+  const dlg=$('#dlg');dlg.classList.toggle('wide',kind==='view');if(!dlg.open)dlg.showModal();
   const first=f.querySelector('input:not([hidden]),select,textarea');if(first&&kind!=='files')first.focus();
 }
-function closeDlg(){const d=$('#dlg');if(d.open)d.close();dlgKind=null;dlgId=null;dlgArg=null}
+function closeDlg(){const d=$('#dlg');const pvv=d.querySelector('video');if(pvv){try{pvv.pause()}catch(e){}}if(d.open)d.close();dlgKind=null;dlgId=null;dlgArg=null}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():''}
 function formErr(m){const e=$('#f-err');if(e){e.textContent=m;e.hidden=false;e.style.color=''}const b=$('#dlgForm button[type=submit]');if(b)b.disabled=false}
 function busy(msg){const e=$('#f-err');if(e){e.textContent=msg;e.hidden=false;e.style.color='var(--muted)'}const b=$('#dlgForm button[type=submit]');if(b)b.disabled=true}
@@ -1022,7 +1052,7 @@ document.addEventListener('click',async ev=>{
   else if(act==='close')closeDlg();
   else if(['new-ws','add','deliver','resched','reedit','stats'].includes(act))openDlg(act,id);
   else if(act==='linkonly')openDlg('files',id,b.dataset.arg);
-  else if(act==='files'||act==='instr')openDlg(act,id,b.dataset.arg);
+  else if(act==='files'||act==='instr'||act==='view')openDlg(act,id,b.dataset.arg);
   else if(act==='pick')pickFiles(id,b.dataset.arg);
   else if(act==='delver'&&v){
     const k=+b.dataset.arg,key='ver:'+id+':'+k,n=srcN(v);
