@@ -9,6 +9,11 @@
       "source": "/upload",
       "destination": "https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev/upload",
       "permanent": false
+    },
+    {
+      "source": "/privacy",
+      "destination": "https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev/privacy",
+      "permanent": false
     }
   ]
 }

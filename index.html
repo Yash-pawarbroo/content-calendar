@@ -26,6 +26,9 @@
   window.CSC.links=function(){return api('/api/links').then(function(j){return j.links})};
   window.CSC.link=function(ws,renew){return api('/api/link',{method:'POST',body:JSON.stringify({ws:ws,renew:!!renew})}).then(function(j){return j.token})};
   window.CSC.invite=function(ws,renew){return api('/api/invite',{method:'POST',body:JSON.stringify({ws:ws||'',renew:!!renew})}).then(function(j){return j.token})};
+  window.CSC.ig={status:function(ws){return api('/api/ig/status?ws='+encodeURIComponent(ws))},media:function(ws){return api('/api/ig/media?ws='+encodeURIComponent(ws))},
+    start:function(ws){return api('/api/ig/start',{method:'POST',body:JSON.stringify({ws:ws,back:location.origin+location.pathname})})},
+    sync:function(ws){return api('/api/ig/sync',{method:'POST',body:JSON.stringify({ws:ws})})},disconnect:function(ws){return api('/api/ig/disconnect',{method:'POST',body:JSON.stringify({ws:ws})})}};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
   window.CSC.teams=function(){return api('/api/teams')};
   window.CSC.joinInfo=function(code){return fetch(BASE+'/api/join-info?code='+encodeURIComponent(code)).then(function(r){return r.ok?r.json():null},function(){return null})};
@@ -460,6 +463,27 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .wsstats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--soft);border-radius:12px;padding:10px 6px}
 .wsstat{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;color:var(--muted)}
 .wsstat b{font-size:1.1rem;color:var(--ink)}
+.sechead{font-size:1.05rem;font-weight:600;margin:22px 0 12px}
+.igcard{margin-bottom:6px}
+.igacct .avatar{width:40px;height:40px}
+.igkpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.trow.igrow{grid-template-columns:minmax(0,2.6fr) repeat(6,minmax(54px,.6fr));text-decoration:none;color:inherit;cursor:pointer}
+a.trow.igrow:hover{background:var(--soft)}
+.igpost{display:flex;align-items:center;gap:10px;min-width:0}
+.igthumb{flex:none;width:44px;height:56px;border-radius:8px;overflow:hidden;background:var(--soft2);display:grid;place-items:center;color:var(--muted)}
+.igthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.igcap{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inform{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:8px}
+.inform:has(#inWs){grid-template-columns:160px minmax(0,1.3fr) minmax(0,1fr) auto}
+.inform .field{width:100%;max-width:none}
+.inspogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:start}
+.inspocard{gap:10px;padding:12px}
+.inspoframe{width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:var(--soft2);display:block}
+.inspoframe.ig{aspect-ratio:auto;height:520px}
+.inspoframe.tall{aspect-ratio:9/16}
+.inspolink{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;border-radius:10px;background:var(--soft);color:var(--ink);text-decoration:none;text-align:center;padding:14px;overflow-wrap:anywhere}
+.inspnote{font-size:.95rem}
+@media(max-width:860px){.igkpis{grid-template-columns:repeat(2,minmax(0,1fr))}.inform,.inform:has(#inWs){grid-template-columns:1fr}.trow.igrow{grid-template-columns:minmax(0,1fr) repeat(3,auto)}.trow.igrow>:nth-child(n+3){display:block}.trow.igrow>[data-l=reach],.trow.igrow>[data-l=shares],.trow.igrow>[data-l=saves]{display:none}.trow.th.igrow{display:none}}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authswap{margin:0;text-align:center}.authswap .authlink{font-size:inherit;color:var(--ink);font-weight:600;padding:0}
@@ -503,7 +527,7 @@ const ALLOW={aroll:['mp4','webm'],broll:['mp4','webm','png','jpg','jpeg','webp',
 const VID=['mp4','webm','mov','m4v'];
 const ACCEPT={aroll:'.mp4,.webm,video/mp4,video/webm',broll:'.mp4,.webm,.png,.jpg,.jpeg,.webp,.gif',script:'.pdf,.txt,.md',edited:'.mp4,.webm,video/mp4,video/webm'};
 const STAGES=[['todo','To edit'],['reedit','Re-edit'],['review','Edited'],['scheduled','Scheduled'],['published','Published']];
-const VIEWS=['overview','videos','clients','analytics','team','settings','admin'];
+const VIEWS=['overview','videos','clients','analytics','inspo','team','settings','admin'];
 const IC={
   home:'<path d="M3 10.5 12 3l9 7.500V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
@@ -538,7 +562,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
+let authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,media:null,loading:false,busy:false,left:0,err:''}, igSort='new', igType='all', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -740,7 +764,7 @@ function readHash(){
 function renderSide(){
   const list=inClient(),nav=(v,icon,label)=>'<button class="nv'+(view===v||(v==='videos'&&view==='project')?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
   let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1></div><div class="slabel">MAIN</div>'+
-    nav('clients','folder','Workspaces')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+'<div class="slabel">WORKFLOW</div>';
+    nav('clients','folder','Workspaces')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+nav('inspo','heart','Inspiration')+'<div class="slabel">WORKFLOW</div>';
   STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
   h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings');
   const adminNav=(CSC||isAdmin())?'<div class="sidebot">'+nav('admin','check','Admin')+'</div>':'';
@@ -760,7 +784,7 @@ function renderTop(){
   if(curWs!=='all'&&wsLoaded&&!wsOf(curWs))curWs='all';
   if(document.activeElement!==sel){sel.innerHTML='<option value="all">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('');sel.value=curWs}
   const v=view==='project'?videos.find(x=>x.id===curVideo):null;
-  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Workspaces',analytics:'Analytics',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
+  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Workspaces',analytics:'Analytics',inspo:'Inspiration',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
   if(CSC){const g=isGuest(),sw=false;$('#roleSel').hidden=!sw;const rt=$('#roleTxt');rt.hidden=sw;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
@@ -980,11 +1004,93 @@ function vClients(){
       (adm&&CSC?'<div class="two"><button class="btn sm" data-act="cplink" data-id="'+esc(w.id)+'">'+ic('link',14)+'Client link</button><button class="btn sm" data-act="cpinvite" data-id="'+esc(w.id)+'">'+ic('link',14)+'Editor link</button></div>':'')+'</section>'});
   return h+'</div>';
 }
+/* ---------- Instagram ---------- */
+function igWs(){return curWs!=='all'&&wsOf(curWs)?curWs:(workspaces.length===1?workspaces[0].id:'')}
+function loadIg(force){
+  if(!CSC||!CSC.ig||!CSC.me)return;const ws=igWs();
+  if(!ws){if(ig.ws)ig={ws:'',st:null,media:null,loading:false,busy:false,left:0,err:''};return}
+  if(ig.ws===ws&&!force&&(ig.st||ig.loading||ig.err))return;
+  ig={ws,st:null,media:null,loading:true,busy:false,left:0,err:''};igShow=30;
+  CSC.ig.status(ws).then(st=>{
+    if(ig.ws!==ws)return;ig.st=st;ig.loading=false;renderAll();
+    if(st.connected)CSC.ig.media(ws).then(m=>{if(ig.ws!==ws)return;ig.media=m.media||[];renderAll();if(!ig.media.length||Date.now()-(st.syncedAt||0)>3600000)syncIg()},()=>{});
+  },e=>{if(ig.ws!==ws)return;ig.loading=false;ig.err=(e&&e.message)||'Instagram could not be checked.';renderAll()});
+}
+async function syncIg(){
+  if(ig.busy||!ig.ws||!CSC)return;const ws=ig.ws;ig.busy=true;ig.err='';renderAll();
+  try{for(let i=0;i<80;i++){
+    const r=await CSC.ig.sync(ws);if(ig.ws!==ws)return;
+    const m=await CSC.ig.media(ws);if(ig.ws!==ws)return;
+    ig.media=m.media||[];ig.st=Object.assign({},ig.st,{username:m.username,name:m.name,pic:m.pic,followers:m.followers,mediaCount:m.mediaCount,syncedAt:m.syncedAt,error:m.error});
+    ig.left=r.remaining||0;if(r.error){ig.err=r.error;break}renderAll();if(!r.remaining)break;
+  }}catch(e){if(ig.ws===ws)ig.err=(e&&e.message)||'Instagram could not be refreshed.'}
+  if(ig.ws===ws){ig.busy=false;ig.left=0;renderAll()}
+}
+function ago(ms){if(!ms)return 'not yet';const m=Math.round((Date.now()-ms)/60000);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago'}
+function igN(m,k){return k==='likes'||k==='comments'?(typeof m[k]==='number'?m[k]:(m.ins&&typeof m.ins[k]==='number'?m.ins[k]:null)):(m.ins&&typeof m.ins[k==='saves'?'saved':k]==='number'?m.ins[k==='saves'?'saved':k]:null)}
+function igKind(m){return m.type==='REELS'?'Reel':m.type==='STORY'?'Story':m.kind==='CAROUSEL_ALBUM'?'Carousel':m.kind==='VIDEO'?'Video':'Post'}
+function igPanel(){
+  const box=(inner)=>'<section class="card igcard">'+inner+'</section>',head='<div class="chead"><span class="row">'+ic('insta',18)+'<span class="ctitle">Instagram</span></span>';
+  if(!CSC)return box(head+'<span class="badge">Live site only</span></div><p class="meta">Connecting Instagram and live numbers work on the live site, not in this preview.</p>');
+  if(!CSC.ig)return '';
+  const ws=igWs();
+  if(!ws)return box(head+'</div><p class="meta">Choose a workspace at the top left to see its Instagram account and all of its posts.</p>');
+  loadIg();
+  const st=ig.st;
+  if(!st)return box(head+'</div><p class="'+(ig.err?'err':'meta')+'">'+esc(ig.err||'Checking Instagram…')+'</p>');
+  if(!st.connected){
+    if(!st.configured)return box(head+'<span class="badge">Not set up</span></div><p class="meta">Instagram isn’t set up on this site yet. The site owner adds the Instagram app details once; after that each client connects their own account with one click.</p>');
+    return box(head+'<span class="badge">Not connected</span></div><p class="meta">Connect this client’s Instagram to see every post and reel they have published, with views, reach, likes, comments, shares and saves. It must be a Business or Creator account. We only read numbers; nothing is ever posted.</p>'+
+      (st.manage?'<div class="row"><button class="btn dark" data-act="igon">'+ic('insta')+'Connect Instagram</button></div><p class="err" id="igErr" hidden></p>':'<p class="meta">The client or the workspace admin can connect it.</p>'));
+  }
+  const all=ig.media||[],types=[['all','All'],['REELS','Reels'],['FEED','Posts']];
+  let list=all.filter(m=>igType==='all'||m.type===igType);
+  const key={views:'views',likes:'likes',comments:'comments',shares:'shares'}[igSort];
+  list=list.slice().sort(key?((a,b)=>(igN(b,key)||0)-(igN(a,key)||0)):((a,b)=>String(b.at).localeCompare(String(a.at))));
+  const sum=k=>all.reduce((n,m)=>n+(igN(m,k)||0),0),kp=(icon,k,label)=>'<div class="kpi">'+ic(icon,16)+'<span class="kv num">'+fmtK(sum(k))+'</span><span class="meta">'+label+'</span></div>';
+  let h=head+'<span class="row">'+(ig.busy?'<span class="meta">'+(ig.left>1?'Loading numbers for older posts… about '+ig.left+' left':'Updating…')+'</span>':'<span class="meta">Updated '+esc(ago(st.syncedAt))+'</span><button class="btn sm" data-act="igsync">Refresh</button>')+
+    (st.manage?(armedDelete==='igoff'?'<button class="btn sm danger" data-act="igoff">Disconnect?</button>':'<button class="btn sm" data-act="igoff">Disconnect</button>'):'')+'</span></div>'+
+    '<div class="row igacct">'+(safeUrl(st.pic)?'<img class="avatar" src="'+esc(st.pic)+'" alt="" referrerpolicy="no-referrer">':'')+'<span><b>@'+esc(st.username||'instagram')+'</b><span class="meta" style="display:block">'+fmtK(st.followers||0)+' followers · '+all.length+(all.length===1?' post':' posts')+' loaded</span></span></div>'+
+    (ig.err?'<p class="err">'+esc(ig.err)+'</p>':'');
+  if(!all.length)return box(h+'<p class="meta">'+(ig.busy||ig.media===null?'Loading this account’s posts…':'No posts were found on this account.')+'</p>');
+  h+='<div class="igkpis">'+kp('video','views','Views')+kp('heart','likes','Likes')+kp('msg','comments','Comments')+kp('share','shares','Shares')+kp('folder','saves','Saves')+'</div>'+
+    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content</span><span class="row"><select class="field" id="igType" aria-label="Type">'+types.map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
+    '<div class="table"><div class="trow th igrow"><span>POST</span><span>VIEWS</span><span>REACH</span><span>LIKES</span><span>COMMENTS</span><span>SHARES</span><span>SAVES</span></div>';
+  const cell=(m,k)=>{const n=igN(m,k);return '<span class="num" data-l="'+k+'">'+(n==null?'—':fmtK(n))+'</span>'};
+  list.slice(0,igShow).forEach(m=>{const d=m.at?new Date(m.at):null;
+    h+='<a class="trow igrow" href="'+esc(safeUrl(m.url)||'#')+'" target="_blank" rel="noopener"><span class="igpost"><span class="igthumb">'+(safeUrl(m.thumb)?'<img src="'+esc(m.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':ic('video',16))+'</span><span style="min-width:0"><b class="igcap">'+esc((m.caption||'').split('\n')[0]||'No caption')+'</b><span class="meta" style="display:block">'+igKind(m)+(d&&!isNaN(d)?' · '+dayOf(d.getTime()):'')+'</span></span></span>'+cell(m,'views')+cell(m,'reach')+cell(m,'likes')+cell(m,'comments')+cell(m,'shares')+cell(m,'saves')+'</a>'});
+  h+='</div>'+(list.length>igShow?'<button class="btn wide" data-act="igmore">Show more ('+(list.length-igShow)+' left)</button>':'')+'<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Numbers can be up to 48 hours behind Instagram.</p>';
+  return box(h);
+}
+/* ---------- Inspiration ---------- */
+function inspoEmbed(u){
+  if(!CSC)return '';
+  let m=/instagram\.com\/(?:[\w.]+\/)?(reel|reels|p|tv)\/([\w-]+)/i.exec(u);
+  if(m)return '<iframe class="inspoframe ig" src="https://www.instagram.com/'+(m[1].toLowerCase()==='p'?'p':'reel')+'/'+esc(m[2])+'/embed" loading="lazy" allowfullscreen scrolling="no" title="Instagram post"></iframe>';
+  m=/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/i.exec(u);
+  if(m)return '<iframe class="inspoframe'+(/shorts\//i.test(u)?' tall':'')+'" src="https://www.youtube.com/embed/'+esc(m[1])+'" loading="lazy" allowfullscreen title="YouTube video"></iframe>';
+  return '';
+}
+function vInspo(){
+  const one=curWs!=='all'&&wsOf(curWs)?curWs:(workspaces.length===1?workspaces[0].id:''),list=inspo.filter(x=>curWs==='all'||x.ws===curWs).sort((a,b)=>(b.at||0)-(a.at||0));
+  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(one&&wsOf(one)?wsOf(one).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+'</div><h2 class="ptitle">Inspiration</h2><p class="meta">Save reels, videos and posts you want to take ideas from. Everyone on the workspace sees them.</p></div></div>';
+  if(!workspaces.length)return h+emptyBox('heart','No workspaces yet','Inspiration is saved inside a client’s workspace.');
+  if(canWrite)h+='<section class="card" style="margin-bottom:16px"><div class="inform">'+(one?'':'<select class="field" id="inWs" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')+'</select>')+
+    '<input class="field" id="inUrl" data-key="inu" type="url" placeholder="Paste an Instagram, YouTube or TikTok link" aria-label="Link"><input class="field" id="inNote" data-key="inn" maxlength="200" placeholder="What do you like about it? (optional)" aria-label="Note"><button class="btn dark" data-act="addinspo">'+ic('plus')+'Add</button></div><p class="err" id="inErr" hidden></p></section>';
+  if(!list.length)return h+emptyBox('heart','Nothing saved yet','Paste a link above to start your inspiration board.');
+  h+='<div class="inspogrid">';
+  list.forEach(x=>{const w=wsOf(x.ws),u=safeUrl(x.url),em=u?inspoEmbed(u):'';
+    h+='<section class="card inspocard">'+(em||'<a class="inspolink" href="'+esc(u||'#')+'" target="_blank" rel="noopener">'+ic('link',20)+'<b>'+esc(u?hostOf(u):'Link')+'</b><span class="meta">Open link ↗</span></a>')+
+      (x.note?'<p class="inspnote">'+esc(x.note)+'</p>':'')+
+      '<div class="row" style="justify-content:space-between"><span class="meta">'+esc(x.by||'Someone')+(x.at?' · '+dayOf(x.at):'')+(curWs==='all'&&w?' · '+esc(w.name):'')+'</span><span class="row" style="flex-wrap:nowrap">'+(u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open ↗</a>':'')+
+      (canWrite?(armedDelete==='in:'+x.id?'<button class="btn sm danger" data-act="delinspo" data-id="'+esc(x.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="delinspo" data-id="'+esc(x.id)+'" aria-label="Remove">'+ic('trash',14)+'</button>'):'')+'</span></div></section>'});
+  return h+'</div>';
+}
 function vAnalytics(){
   const list=inClient(),withN=list.filter(v=>['likes','comments','shares'].some(k=>typeof v[k]==='number'));
   const sum=k=>withN.reduce((s,v)=>s+(typeof v[k]==='number'?v[k]:0),0);
-  let h='<div class="pagehead"><div><h2 class="ptitle">Analytics</h2><p class="meta">Instagram is not connected. Totals come from numbers entered by hand on each video.</p></div></div>';
-  if(!list.length)return h+emptyBox('chart','No videos yet','Add a video to see its edited video, comments and notes here.');
+  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+'</div><h2 class="ptitle">Analytics</h2><p class="meta">Live numbers from the connected Instagram account, and the videos made in this workspace.</p></div></div>'+igPanel()+'<h3 class="sechead">Videos made here</h3>';
+  if(!list.length)return h+emptyBox('chart','No videos yet','Videos made in this workspace appear here with their notes and numbers.');
   if(withN.length)h+='<div class="grid4" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="card">'+ic('heart',18)+'<span class="bign num">'+fmtK(sum('likes'))+'</span><span class="meta">Likes</span></div><div class="card">'+ic('msg',18)+'<span class="bign num">'+fmtK(sum('comments'))+'</span><span class="meta">Comments</span></div><div class="card">'+ic('share',18)+'<span class="bign num">'+fmtK(sum('shares'))+'</span><span class="meta">Shares</span></div></div>';
   if(!list.some(v=>v.id===anVideo))anVideo=list[0].id;
   const v=list.find(x=>x.id===anVideo);
@@ -1107,7 +1213,7 @@ function renderAll(){
   else if(CSC&&!CSC.me)html=view==='admin'?vAdmin():vSignIn();
   else if(CSC&&CSC.me.role==='pending')html=vPending();
   else if(!workspaces.length&&view!=='team'&&view!=='settings'&&view!=='admin')html=emptyBox('user','Start with your first client',isAdmin()?'Each client gets its own videos and calendar.':'Nothing here yet. The admin adds clients from the Admin page.',isAdmin()?'<button class="btn dark" data-act="new-ws">'+ic('plus')+'New client</button>':'');
-  else html=({overview:vOverview,calendar:vCalendar,videos:vVideos,project:vProject,clients:vClients,analytics:vAnalytics,team:vTeam,settings:vSettings,admin:vAdmin}[view]||vVideos)();
+  else html=({overview:vOverview,calendar:vCalendar,videos:vVideos,project:vProject,clients:vClients,analytics:vAnalytics,inspo:vInspo,team:vTeam,settings:vSettings,admin:vAdmin}[view]||vVideos)();
   if(html!==lastHtml){
     const keep={},fk=document.activeElement&&document.activeElement.dataset?document.activeElement.dataset.key:null;
     document.querySelectorAll('[data-key]').forEach(i=>{if(i.value)keep[i.dataset.key]=i.value});
@@ -1256,7 +1362,7 @@ document.addEventListener('click',async ev=>{
   const pk=ev.target.closest('[data-pick]');if(pk){const i=document.getElementById(pk.dataset.pick);if(i)i.click();return}
   const b=ev.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,id=b.dataset.id,v=id?videos.find(x=>x.id===id):null;
-  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin','newinvite'].includes(act)&&armedDelete)armedDelete=null;
+  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin','newinvite','delinspo','igoff'].includes(act)&&armedDelete)armedDelete=null;
   if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
   else if(act==='stage'){curStage=b.dataset.stage;go('videos')}
   else if(act==='addws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);renderTop();openDlg('add')}
@@ -1297,6 +1403,22 @@ document.addEventListener('click',async ev=>{
     try{if(authMode==='signup')await CSC.signup(CSC.join?{email,password:pw,join:CSC.join}:{email,password:pw});else await CSC.login(email,pw)}catch(x){say(x.message||'That did not work. Try again.')}
   }
   else if(act==='playpv'){stopPreviews();const box=b.closest('.pv,.preview'),d=document.createElement('div');b.hidden=true;box.insertBefore(d,box.firstChild);mountPlayer(d,b.dataset.asset,true)}
+  else if(act==='igon'){b.disabled=true;try{const r=await CSC.ig.start(igWs());location.href=r.url}catch(x){b.disabled=false;const e=$('#igErr');if(e){e.textContent=x.message||'Instagram could not be opened.';e.hidden=false}}}
+  else if(act==='igsync')syncIg();
+  else if(act==='igmore'){igShow+=30;renderAll()}
+  else if(act==='igoff'){if(armedDelete!=='igoff'){armedDelete='igoff';renderAll();return}armedDelete=null;try{await CSC.ig.disconnect(ig.ws)}catch(x){fail(x)}loadIg(true);renderAll()}
+  else if(act==='addinspo'){
+    const e=$('#inErr'),u=val('inUrl'),ws=(curWs!=='all'&&wsOf(curWs)?curWs:(workspaces.length===1?workspaces[0].id:val('inWs')));
+    if(!safeUrl(u)){e.textContent='Paste a full link that starts with https://';e.hidden=false;return}
+    if(!ws){e.textContent='Choose a workspace first.';e.hidden=false;return}
+    const nid=newId('i'),row={ws,url:u.slice(0,500),note:val('inNote').slice(0,200),by:who(),at:Date.now()};
+    $('#inUrl').value='';$('#inNote').value='';
+    if(db){try{await db.doc('inspo/'+nid).set(row)}catch(x){fail(x)}}else{inspo.push(Object.assign({id:nid},row));renderAll()}
+  }
+  else if(act==='delinspo'){
+    if(armedDelete!=='in:'+id){armedDelete='in:'+id;renderAll();return}
+    armedDelete=null;if(db){try{await db.doc('inspo/'+id).delete()}catch(x){fail(x)}}else{inspo=inspo.filter(x=>x.id!==id);renderAll()}
+  }
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
   else if(act==='cpinvite')await copyInvite(id||'',false);
@@ -1412,6 +1534,8 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='stageSel'){curStage=t.value;renderAll()}
   else if((t.id==='roleSel'||t.id==='roleSel2')&&(!CSC||isGuest()||isAdmin())){role=t.value;LS.set('csc.role',role);renderAll()}
+  else if(t.id==='igSort'){igSort=t.value;renderAll()}
+  else if(t.id==='igType'){igType=t.value;igShow=30;renderAll()}
   else if(t.id==='wsSel'){curWs=t.value;LS.set('csc.ws',curWs);if(view==='project')go('videos');else renderAll()}
   else if(t.type==='file'&&t.id!=='rowPick'){const s=document.getElementById('p-'+t.id);if(s)s.textContent=t.files&&t.files[0]?t.files[0].name:'No file chosen'}
 });
@@ -1434,7 +1558,7 @@ document.addEventListener('loadedmetadata',e=>{const t=e.target,p=t.closest&&t.c
 document.addEventListener('error',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest('.pv');if(p)p.classList.add('bad')},true);
 document.addEventListener('timeupdate',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest&&t.closest('.pv,.fullpv');if(!p||t.paused||t.currentTime<0.6||p.classList.contains('nopic'))return;let n=1;try{n=t.getVideoPlaybackQuality?t.getVideoPlaybackQuality().totalVideoFrames:(t.webkitDecodedFrameCount==null?1:t.webkitDecodedFrameCount)}catch(x){}if(n===0)p.classList.add('nopic')},true);
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('pplWs')&&CSC)CSC.userUpdate({id:t.dataset.id,ws:t.value}).then(loadPeople,pplErr)});
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^auth(Name|Brand|Email|Pw)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="authgo"]');if(b)b.click();return}if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^in(Url|Note)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="addinspo"]');if(b)b.click();return}if(e.key==='Enter'&&/^auth(Name|Brand|Email|Pw)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="authgo"]');if(b)b.click();return}if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
 $('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
 $('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDlg()});
@@ -1442,6 +1566,7 @@ window.addEventListener('hashchange',()=>{readHash();renderAll()});
 
 /* ---------- boot ---------- */
 readHash();if(!role)role='owner';renderAll();
+try{const qm=new URLSearchParams(location.search).get('ig');if(qm){notice(qm);history.replaceState(null,'',location.pathname+location.hash)}}catch(e){}
 (async function(){
   const c=window.claude;
   if(c&&c.use){
@@ -1468,6 +1593,7 @@ readHash();if(!role)role='owner';renderAll();
   db.collection('workspaces').onSnapshot(s=>{workspaces=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));wsLoaded=true;renderAll()},onErr);
   if(CSC&&isAdmin())db.collection('access').onSnapshot(s=>{access=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));renderAll()},()=>{});
   db.doc('settings/app').onSnapshot(d=>{appSettings=d.exists?Object.assign({},d.data()):{};renderAll()},()=>{});
+  db.collection('inspo').onSnapshot(s=>{inspo=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));if(view==='inspo')renderAll()},()=>{});
   db.collection('videos').onSnapshot(s=>{videos=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));vidLoaded=true;renderAll()},onErr);
 })();
 })();
