@@ -110,7 +110,7 @@ h1{font-size:.95rem;font-weight:700;line-height:1.2}
 .nv:hover{background:var(--soft2)}
 .nv.on{background:#fff;box-shadow:0 1px 2px rgba(15,17,20,.1);font-weight:600}
 .dot{width:8px;height:8px;border-radius:50%;flex:none;margin:0 4px}
-.d-todo{background:var(--blue)} .d-reedit{background:#e08a1e} .d-scheduled{background:#9aa0aa} .d-published{background:#2f9e5b}
+.d-todo{background:var(--blue)} .d-reedit{background:#e08a1e} .d-review{background:#8a4a14} .d-scheduled{background:#9aa0aa} .d-published{background:#2f9e5b}
 .storage{margin-top:auto;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 .bar{height:5px;border-radius:3px;background:var(--soft2);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--blue);border-radius:3px}
@@ -199,7 +199,7 @@ select.field{max-width:190px;font-weight:600}
 button.trow:hover{background:var(--soft)}
 .trow.th{background:var(--soft);color:var(--muted);font-size:.76rem;font-weight:600;letter-spacing:.04em}
 .trow .t1{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
 .bign{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .drow{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px 14px;padding:11px 0;border-top:1px solid var(--line);align-items:start}
@@ -422,7 +422,7 @@ const TYPE_EXT={'video/mp4':'mp4','video/webm':'webm','application/pdf':'pdf','t
 const ALLOW={aroll:['mp4','webm'],broll:['mp4','webm','png','jpg','jpeg','webp','gif'],script:['pdf','txt','md'],edited:['mp4','webm']};
 const VID=['mp4','webm','mov','m4v'];
 const ACCEPT={aroll:'.mp4,.webm,video/mp4,video/webm',broll:'.mp4,.webm,.png,.jpg,.jpeg,.webp,.gif',script:'.pdf,.txt,.md',edited:'.mp4,.webm,video/mp4,video/webm'};
-const STAGES=[['todo','To edit'],['reedit','Re-edit'],['scheduled','Scheduled'],['published','Published']];
+const STAGES=[['todo','To edit'],['reedit','Re-edit'],['review','Edited'],['scheduled','Scheduled'],['published','Published']];
 const VIEWS=['overview','videos','clients','analytics','team','settings','admin'];
 const IC={
   home:'<path d="M3 10.5 12 3l9 7.500V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -498,7 +498,8 @@ function filesOf(v,ver,kind){const out=[];materials(v).forEach((m,i)=>{if((m.ver
 function instrOf(v,ver){return (v.instr&&v.instr[ver])||(ver===1?v.notes||'':'')}
 function hasEdit(v){return okAsset(v.editedAsset)||!!safeUrl(v.editedUrl)}
 function isOut(v){return (v.status==='scheduled'||v.status==='published')&&hasEdit(v)}
-function stageOf(v){return v.status==='published'?'published':isOut(v)?'scheduled':v.changeNote?'reedit':'todo'}
+function stageOf(v){return v.status==='published'?'published':isOut(v)?(v.date?'scheduled':'review'):v.changeNote?'reedit':'todo'}
+function whenOf(v){return v.date?niceDate(v.date)+(v.time?', '+niceTime(v.time):''):'No date yet'}
 function stageBadge(v){const s=stageOf(v);return '<span class="badge '+(s==='todo'?'blue':s==='reedit'?'warn':s==='published'?'ok':'')+'">'+STAGES.find(x=>x[0]===s)[1]+'</span>'}
 function approval(v){
   if(v.status==='published')return ['ok','Published'];
@@ -620,7 +621,7 @@ function vOverview(){
   STAGES.forEach(([k,label])=>{h+='<button class="card" style="text-align:left" data-act="stage" data-stage="'+k+'"><span class="row"><i class="dot d-'+k+'" style="margin:0"></i><span class="meta">'+label+'</span></span><span class="bign num">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
   const up=list.filter(v=>isOut(v)&&v.status==='scheduled'&&v.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).slice(0,6);
   const todo=list.filter(v=>['todo','reedit'].includes(stageOf(v))).slice(0,6);
-  const li=v=>'<button class="slot" data-act="open" data-id="'+esc(v.id)+'"><b class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(v.title)+'</b>'+(isOut(v)?'<span class="meta num">'+esc(niceDate(v.date))+', '+esc(niceTime(v.time))+'</span>':'')+stageBadge(v)+'</button>';
+  const li=v=>'<button class="slot" data-act="open" data-id="'+esc(v.id)+'"><b class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(v.title)+'</b>'+(isOut(v)?'<span class="meta num">'+esc(whenOf(v))+'</span>':'')+stageBadge(v)+'</button>';
   h+='</div><div class="grid2"><section class="card"><div class="chead"><span class="ctitle">Going out next</span></div>'+(up.length?up.map(li).join(''):emptyBox('cal','Nothing scheduled','Edited videos appear here once they have a date.'))+'</section>'+
     '<section class="card"><div class="chead"><span class="ctitle">Waiting on edits</span><button class="btn sm" data-act="nav" data-view="videos">All videos</button></div>'+(todo.length?todo.map(li).join(''):emptyBox('check','All caught up','No videos are waiting for an edit.'))+'</section></div>';
   return h;
@@ -758,7 +759,7 @@ function editCol(v){
   h+='<div class="row"><span class="badge '+ap[0]+'">'+(ap[0]==='ok'?ic('check',13):'')+ap[1]+'</span>'+(v.deliveredAt&&has?'<span class="meta">Uploaded '+esc(stamp(v.deliveredAt))+(v.editor?' by '+esc(v.editor):'')+'</span>':'')+'</div>';
   if(v.changeNote)h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
   if(v.editorNote&&has)h+='<div class="instr">Editor note: '+esc(v.editorNote)+'</div>';
-  if(out)h+='<div class="row" style="justify-content:space-between"><span class="row">'+ic('insta')+'<span><b class="num">'+esc(niceDate(v.date))+', '+esc(niceTime(v.time))+'</b><div class="meta">Instagram'+(hasYt(v)?' · also YouTube':'')+'</div></span></span>'+(canWrite&&v.status==='scheduled'?'<button class="btn sm" data-act="resched" data-id="'+id+'">Change</button>':'')+'</div>';
+  if(out)h+='<div class="row" style="justify-content:space-between"><span class="row">'+ic('insta')+'<span><b class="num">'+esc(whenOf(v))+'</b><div class="meta">Instagram'+(hasYt(v)?' · also YouTube':'')+'</div></span></span>'+(canWrite&&v.status==='scheduled'?'<button class="btn sm" data-act="resched" data-id="'+id+'">'+(v.date?'Change':'Set date')+'</button>':'')+'</div>';
   if(editor&&v.status!=='published')h+='<button class="btn blue wide" data-act="deliver" data-id="'+id+'">'+ic('up')+(has?'Upload new version':'Upload edited video')+'</button>';
   if(okAsset(v.editedAsset))h+='<button class="btn wide" data-act="dl" data-id="'+id+'">'+ic('down')+'Download</button>';
   if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Mark published</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Request changes</button></div>';
@@ -780,7 +781,7 @@ function projectBlock(v,single){
   if(owner&&st==='scheduled'&&!v.approved)pri='<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>';
   else if(owner&&st==='scheduled')pri='<button class="btn dark" data-act="publish" data-id="'+id+'">Mark published</button>';
   let h='<div class="phead">'+(single?'<button class="btn sq" data-act="nav" data-view="videos" aria-label="Back to videos">'+ic('back')+'</button>':'')+'<div class="pinfo"><div class="row"><h2 class="ptitle">'+esc(v.title)+'</h2>'+stageBadge(v)+'</div>'+
-    '<div class="pmeta">'+(w?'<span>'+ic('user',14)+esc(w.name)+'</span>':'')+'<span>'+ic('insta',14)+'Instagram Reel'+(hasYt(v)?' + YouTube':'')+'</span><span>'+ic('cal',14)+(isOut(v)?esc(niceDate(v.date))+', '+esc(niceTime(v.time)):'Not scheduled')+'</span></div></div>'+
+    '<div class="pmeta">'+(w?'<span>'+ic('user',14)+esc(w.name)+'</span>':'')+'<span>'+ic('insta',14)+'Instagram Reel'+(hasYt(v)?' + YouTube':'')+'</span><span>'+ic('cal',14)+(isOut(v)?esc(whenOf(v)):'Not scheduled')+'</span></div></div>'+
     '<div class="row"><button class="btn" data-act="asel" data-id="'+id+'">'+ic('chart')+'Analytics &amp; edit</button><button class="btn" data-act="sharev" data-id="'+id+'">'+ic('share')+'Copy summary</button>'+
     (isAdmin()?(armedDelete===v.id?'<button class="btn danger" data-act="delete" data-id="'+id+'">Delete video?</button>':'<button class="btn sq" data-act="delete" data-id="'+id+'" aria-label="Delete video" title="Delete video">'+ic('trash')+'</button>'):'')+pri+'</div></div><div class="pgrid"><div class="col">';
   for(let i=1;i<=n;i++)h+=srcCard(v,i,i===n);
@@ -792,17 +793,19 @@ function deliverCard(v){
   let h='<aside class="card deliver" aria-label="Edited video"><div class="chead"><span class="ctitle">Edited video</span><span class="badge '+ap[0]+'">'+ap[1]+'</span></div>';
   if(v.changeNote)h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
   if(has){
-    h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Version '+(v.revision||1)+'</b><div class="meta">'+(out?esc(niceDate(v.date))+', '+esc(niceTime(v.time)):'Previous edit')+'</div></span>'+
+    h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Version '+(v.revision||1)+'</b><div class="meta">'+(out?esc(whenOf(v)):'Previous edit')+'</div></span>'+
       (okAsset(v.editedAsset)?'<button class="btn sm sq" data-act="dl" data-id="'+id+'" aria-label="Download edited video" title="Download">'+ic('down',14)+'</button>':'<a class="btn sm sq" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener" aria-label="Open edited video" title="Open link">'+ic('link',14)+'</a>')+'</div>';
   }
   if(editor&&v.status!=='published'){
     const d=v.date||ymd(addDays(new Date(),1)),t=v.time||'18:00';
     if(assets)h+='<button class="minidrop'+(pend?' picked':'')+'" data-act="pickedit" data-id="'+id+'" data-dz="'+id+'|edited:0">'+ic(pend?'check':'up',16)+'<span>'+(pend?esc(pend.name):(has?'Choose new version':'Choose edited video'))+'</span></button>';
     h+=bigLink()+'<input class="field edLink" data-key="l'+id+'" type="url" placeholder="'+(assets?'or paste a link (over '+LIM+')':'Edited video link')+'" aria-label="Edited video link">'+
+      '<p class="err" hidden></p><button class="btn dark wide" data-act="deliverinline" data-arg="now" data-id="'+id+'">'+ic('up')+'Upload now</button>'+
+      '<div class="orline"><span>or set the Instagram date</span></div>'+
       '<div class="two"><input class="field edDate" data-key="d'+id+'" type="date" value="'+esc(d)+'" aria-label="Instagram date"><input class="field edTime" data-key="t'+id+'" type="time" value="'+esc(t)+'" aria-label="Instagram time"></div>'+
-      '<p class="err" hidden></p><button class="btn dark wide" data-act="deliverinline" data-id="'+id+'">'+ic('up')+(has?'Upload new version':'Upload and schedule')+'</button>';
+      '<button class="btn wide" data-act="deliverinline" data-arg="schedule" data-id="'+id+'">'+ic('cal')+'Upload and schedule</button>';
   }else if(!has)h+='<p class="meta">'+(owner?'Your editor uploads the edit here with a date and time.':'No edit yet.')+'</p>';
-  if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Publish</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Changes</button></div>';
+  if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Publish</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Changes</button></div>'+(v.date?'':'<button class="btn wide" data-act="resched" data-id="'+id+'">'+ic('cal')+'Set the Instagram date</button>');
   return h+'</aside>';
 }
 function noteCard(v){
@@ -1119,10 +1122,11 @@ document.addEventListener('click',async ev=>{
     const say=(m,soft)=>{err.textContent=m;err.hidden=!m;err.style.color=soft?'var(--muted)':''};
     if(ed&&!safeUrl(ed))return say('Paste the full link, starting with https://');
     if(!file&&!ed)return say(assets?'Choose the edited video, or paste a link.':'Paste the edited video link.');
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^\d{2}:\d{2}/.test(time))return say('Choose a date and time.');
+    const sched=b.dataset.arg!=='now';
+    if(sched&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^\d{2}:\d{2}/.test(time)))return say('Choose a date and time.');
     let up=null;b.disabled=true;
     if(file&&assets){say('Uploading video. Keep this page open.',true);try{up=await uploadOne(file,'edited')}catch(e){b.disabled=false;return say(e.msg||'The upload did not finish.')}}
-    const had=hasEdit(v),rev=v.revision||1,patch={date,time:time.slice(0,5)};
+    const had=hasEdit(v),rev=v.revision||1,patch=sched?{date,time:time.slice(0,5)}:{date:v.date||'',time:v.time||''};
     if(had)patch.edits=(v.edits||[]).concat([{asset:v.editedAsset||'',url:v.editedUrl||'',name:v.editedName||'',size:v.editedSize||0,at:v.deliveredAt||0,editor:v.editor||'',rev}]);
     Object.assign(patch,{editedUrl:ed,editedAsset:up?up.asset:'',editedName:up?up.name:'',editedSize:up?up.size:0,editorNote:'',changeNote:'',approved:false,status:'scheduled',editor:who(),revision:had?rev+1:rev,deliveredAt:Date.now()});
     delete pendingEdit[id];const l=box.querySelector('.edLink');if(l)l.value='';
@@ -1136,7 +1140,7 @@ document.addEventListener('click',async ev=>{
     await patchVideo(id,{thread:(v.thread||[]).concat([{at:Date.now(),by:who(),role,text}]).slice(-100)});
   }
   else if(act==='sharev'&&v){
-    const w=wsOf(v.ws),ap=approval(v),text=v.title+(w?' ('+w.name+')':'')+'\nStatus: '+ap[1]+(isOut(v)?'\nInstagram: '+niceDate(v.date)+', '+niceTime(v.time):'')+(safeUrl(v.editedUrl)?'\nEdited video: '+v.editedUrl:'');
+    const w=wsOf(v.ws),ap=approval(v),text=v.title+(w?' ('+w.name+')':'')+'\nStatus: '+ap[1]+(isOut(v)?'\nInstagram: '+whenOf(v):'')+(safeUrl(v.editedUrl)?'\nEdited video: '+v.editedUrl:'');
     const lab=b.innerHTML;try{await navigator.clipboard.writeText(text);b.textContent='Copied'}catch(e){b.textContent='Copy not available here'}
     setTimeout(()=>{if(b.isConnected)b.innerHTML=lab},1600);
   }
