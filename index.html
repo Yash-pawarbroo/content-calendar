@@ -490,6 +490,22 @@ a.trow.igrow:hover{background:var(--soft)}
 .igpostst.ok{background:var(--ok-soft);border-color:#cfe9d8}
 .igpostst.ok b{color:var(--ok)}
 .igpostst.bad{background:var(--warn-soft);border-color:#f3dcb4}
+.menubtn{display:none;margin-left:auto;width:38px;height:38px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);place-items:center}
+.minirow{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px}
+.renlnk{border:0;background:none;padding:0 0 0 6px;font:inherit;font-size:.7rem;letter-spacing:0;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.minirow .lnk{border:0;background:none;padding:2px 0;font:inherit;font-size:.84rem;font-weight:600;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.minirow .lnk:hover{color:var(--ink)}
+.card.todo{margin-bottom:14px;border-color:#e7d3b5;background:#fffaf2}
+@media (max-width:860px){
+  .side{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:2px;padding:10px 16px}
+  .side .brand{display:flex;align-items:center;width:100%;padding:0}
+  .menubtn{display:grid}
+  .side>:not(.brand){display:none !important}
+  .side.open>.nv,.side.open>.sidebot{display:flex !important}
+  .side.open>.sidebot{flex-direction:column}
+  .side.open{padding-bottom:12px}
+  .nv{width:100%}
+}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authswap{margin:0;text-align:center}.authswap .authlink{font-size:inherit;color:var(--ink);font-weight:600;padding:0}
@@ -554,6 +570,7 @@ const IC={
   full:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   check:'<path d="m5 12 5 5 9-10"/>',
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
   link:'<path d="M10 14a4 4 0 0 0 5.500 0l3-3a4 4 0 0 0-5.500-5.500l-1 1M14 10a4 4 0 0 0-5.500 0l-3 3a4 4 0 0 0 5.500 5.500l1-1"/>',
   trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   edit:'<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>',
@@ -767,14 +784,16 @@ function readHash(){
   if(h.indexOf('v-')===0){view='project';curVideo=h.slice(2)}
   else if(VIEWS.includes(h)){view=h;curVideo=null}
 }
+function fullMenu(){return !CSC||!CSC.me||isAdmin()}
 function renderSide(){
   const list=inClient(),nav=(v,icon,label)=>'<button class="nv'+(view===v||(v==='videos'&&view==='project')?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
-  let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1></div><div class="slabel">MAIN</div>'+
-    nav('clients','folder','Workspaces')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+nav('inspo','heart','Inspiration')+'<div class="slabel">WORKFLOW</div>';
+  const full=fullMenu(),many=!(CSC&&CSC.me&&CSC.me.ws);
+  let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1><button type="button" class="menubtn" data-act="menu" aria-label="Menu" aria-expanded="false">'+ic('menu',20)+'</button></div><div class="slabel">MAIN</div>'+
+    (many?nav('clients','folder','Workspaces'):'')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+nav('inspo','heart','Inspiration')+'<div class="slabel">WORKFLOW</div>';
   STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
-  h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings');
-  const adminNav=(CSC||isAdmin())?'<div class="sidebot">'+nav('admin','check','Admin')+'</div>':'';
-  if(usage&&usage.maxBytes){const pct=Math.min(100,Math.round(usage.bytes/usage.maxBytes*100));
+  if(full)h+='<div class="slabel">SETTINGS</div>'+nav('team','team','Team')+nav('settings','gear','Settings');
+  const adminNav=full&&(CSC||isAdmin())?'<div class="sidebot">'+nav('admin','check','Admin')+'</div>':'';
+  if(full&&usage&&usage.maxBytes){const pct=Math.min(100,Math.round(usage.bytes/usage.maxBytes*100));
     h+=adminNav+'<div class="storage" style="margin-top:8px"><b>Storage</b><span class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div></div>'}
   else h+=adminNav;
   $('#side').innerHTML=h;
@@ -800,7 +819,10 @@ function renderTop(){
 function emptyBox(icon,title,text,extra){return '<div class="empty">'+ic(icon,20)+'<b style="color:var(--ink)">'+title+'</b><span>'+text+'</span>'+(extra||'')+'</div>'}
 function vOverview(){
   const list=inClient(),today=ymd(new Date());
-  let h='<div class="pagehead"><h2 class="ptitle">Overview</h2>'+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div><div class="grid4">';
+  let h='<div class="pagehead"><h2 class="ptitle">Overview</h2>'+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div>';
+  const mine=isOwner()&&!(CSC&&isAdmin())?list.filter(v=>isOut(v)&&v.status!=='published'&&!v.approved):isEditor()&&!(CSC&&isAdmin())?list.filter(v=>['todo','reedit'].includes(stageOf(v))):[];
+  if(mine.length)h+='<section class="card todo"><div class="chead"><span class="ctitle">'+(isOwner()?(mine.length===1?'1 video needs your review':mine.length+' videos need your review'):(mine.length===1?'1 video to edit':mine.length+' videos to edit'))+'</span></div>'+mine.slice(0,6).map(v=>'<button class="slot" data-act="open" data-id="'+esc(v.id)+'"><b class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(v.title)+'</b>'+stageBadge(v)+'<span class="btn sm">'+(isOwner()?'Review':'Open')+'</span></button>').join('')+'</section>';
+  h+='<div class="grid4">';
   STAGES.forEach(([k,label])=>{h+='<button class="card" style="text-align:left" data-act="stage" data-stage="'+k+'"><span class="row"><i class="dot d-'+k+'" style="margin:0"></i><span class="meta">'+label+'</span></span><span class="bign num">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
   const up=list.filter(v=>isOut(v)&&v.status==='scheduled'&&v.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).slice(0,6);
   const todo=list.filter(v=>['todo','reedit'].includes(stageOf(v))).slice(0,6);
@@ -826,7 +848,7 @@ function vVideos(){
   const ql=q.toLowerCase();
   const list=inClient().filter(v=>(curStage==='all'||stageOf(v)===curStage)&&(!ql||(v.title||'').toLowerCase().includes(ql)||((wsOf(v.ws)||{}).name||'').toLowerCase().includes(ql)));
   if(role==='editor'){const o={reedit:0,todo:1,scheduled:2,published:3};list.sort((a,b)=>o[stageOf(a)]-o[stageOf(b)])}
-  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+'</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row">'+
+  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+(CSC&&CSC.me&&CSC.me.ws&&canWrite&&wsOf(CSC.me.ws)?' <button class="lnk renlnk" data-act="renws" data-id="'+esc(CSC.me.ws)+'">Rename</button>':'')+'</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row">'+
     (isClient()?'<button class="btn" data-act="cpinvite">'+ic('link')+'Invite your editor</button>':'')+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div></div>';
   if(isClient()&&inviteUrl)h+='<section class="card invitebox"><div class="chead"><span class="ctitle">Your editor’s invite link</span><button class="btn sm" data-act="hideinvite">Close</button></div><p class="meta">Send this link to your editor. They sign up from it and can start on your videos straight away. Share it only with your editor.</p><div class="row" style="flex-wrap:nowrap"><input class="field grow" readonly value="'+esc(inviteUrl)+'" aria-label="Editor invite link" onfocus="this.select()"><button class="btn sm dark" data-act="cpinvite">Copy</button>'+(armedDelete==='inv'?'<button class="btn sm danger" data-act="newinvite">Replace link?</button>':'<button class="btn sm" data-act="newinvite">New link</button>')+'</div></section>';
   if(!list.length)return h+emptyBox('video',q?'No matches':'No videos here yet',q?'Nothing matches “'+esc(q)+'”.':'Videos appear here when they are added.',isOwner()&&!q?'<button class="btn sm" data-act="add">'+ic('plus',14)+'New video</button>':'');
@@ -992,9 +1014,14 @@ function deliverCard(v){
       '<div class="two"><input class="field edDate" data-key="d'+id+'" type="date" value="'+esc(d)+'" aria-label="Instagram date"><input class="field edTime" data-key="t'+id+'" type="time" value="'+esc(t)+'" aria-label="Instagram time"></div>'+
       '<button class="btn wide" data-act="deliverinline" data-arg="schedule" data-id="'+id+'">'+ic('cal')+'Upload and schedule</button>';
   }else if(!has)h+='<p class="meta">'+(owner?'Your editor uploads the edit here with a date and time.':'No edit yet.')+'</p>';
-  if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Publish</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Changes</button></div>'+(v.date?'':'<button class="btn wide" data-act="resched" data-id="'+id+'">'+ic('cal')+'Set the Instagram date</button>');
-  if(owner&&has&&v.status==='published')h+='<button class="btn wide" data-act="reedit" data-id="'+id+'">'+ic('edit')+'Request a re-edit</button>';
-  if(owner&&has&&CSC&&CSC.ig&&stageOf(v)!=='reedit')h+=igPostBox(v);
+  if(owner&&out&&v.status==='scheduled'){
+    const ig=!!(CSC&&CSC.ig&&okAsset(v.editedAsset)),posting=ig&&(igPostOf(v)||{}).status,busyPost=posting==='queued'||posting==='processing';
+    if(!v.approved)h+='<div class="two"><button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button><button class="btn" data-act="reedit" data-id="'+id+'">Request changes</button></div>';
+    else if(!busyPost)h+=ig?'<button class="btn dark wide" data-act="igpost" data-id="'+id+'">'+ic('insta')+'Post to Instagram</button>':'<button class="btn dark wide" data-act="publish" data-id="'+id+'">'+ic('check')+'Mark as published</button>';
+    h+='<div class="minirow">'+(v.approved?'<button class="lnk" data-act="reedit" data-id="'+id+'">Request changes</button>':'')+'<button class="lnk" data-act="resched" data-id="'+id+'">'+(v.date?'Change date':'Set the Instagram date')+'</button>'+(v.approved&&ig&&!busyPost?'<button class="lnk" data-act="publish" data-id="'+id+'">Mark as published</button>':'')+'</div>';
+  }
+  if(owner&&has&&v.status==='published')h+='<div class="minirow"><button class="lnk" data-act="reedit" data-id="'+id+'">Request changes</button></div>';
+  if(owner&&has&&CSC&&CSC.ig&&stageOf(v)!=='reedit'&&!(v.status==='scheduled'&&isOut(v)&&!igPostOf(v)))h+=igPostBox(v,true);
   return h+'</aside>';
 }
 const PICK=[['reedit','Re-edit'],['edited','Edited'],['approved','Approved'],['published','Published']],PCOL={reedit:['#fff4e0','#a85a08'],edited:['#f3e9df','#8a4a14'],approved:['#e8f0fb','#1d4e89'],published:['#e9f6ee','#1f7a45']};function pickOf(v){return v.status==='published'?'published':isOut(v)?(v.approved?'approved':'edited'):v.changeNote?'reedit':'edited'}function statusPick(v){const ap=approval(v);if(!canWrite||!hasEdit(v)||!(isClient()||isAdmin()))return '<span class="badge '+ap[0]+'">'+ap[1]+'</span>';const cur=pickOf(v),c=PCOL[cur];return '<select aria-label="Change status" data-id="'+esc(v.id)+'" onchange="cscSetStatus(this)" style="border:0;border-radius:6px;height:24px;padding:0 6px;font-size:.76rem;font-weight:600;cursor:pointer;background:'+c[0]+';color:'+c[1]+'">'+PICK.map(([k,l])=>'<option value="'+k+'"'+(k===cur?' selected':'')+'>'+l+'</option>').join('')+'</select>'}window.cscSetStatus=async function(el){const v=videos.find(x=>x.id===el.dataset.id);if(!v)return;if(el.value==='reedit'){el.value=pickOf(v);openDlg('reedit',v.id);return}const P={edited:{status:'scheduled',approved:false,changeNote:''},approved:{status:'scheduled',approved:true,changeNote:''},published:{status:'published',approved:true,changeNote:'',publishedAt:Date.now()}}[el.value];if(!P)return;el.disabled=true;await patchVideo(v.id,P);el.disabled=false};
@@ -1101,7 +1128,7 @@ function igPollPosts(){
 }
 function igPostOf(v){const c=igPosts[v.ws];if(!c){loadPosts(v.ws);return null}return (c.list||[]).filter(p=>p.vid===v.id).sort((a,b)=>(b.postedAt||b.at||0)-(a.postedAt||a.at||0))[0]||null}
 function igWhen(ms){const d=new Date(ms);return dayOf(ms)+', '+niceTime(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'))}
-function igPostBox(v){
+function igPostBox(v,compact){
   const p=igPostOf(v),id=esc(v.id);
   if(!okAsset(v.editedAsset))return '<p class="meta">To post to Instagram from here, the editor has to upload the edit as a file, not a link.</p>';
   if(p&&p.status==='published')return '<div class="igpostst ok">'+ic('insta',16)+'<span class="grow"><b>Posted to Instagram</b><span class="meta" style="display:block">'+esc(p.postedAt?igWhen(p.postedAt):'')+'</span></span>'+(safeUrl(p.url)?'<a class="btn sm" href="'+esc(p.url)+'" target="_blank" rel="noopener">View ↗</a>':'')+'</div>';
@@ -1109,7 +1136,8 @@ function igPostBox(v){
   if(p&&p.status==='queued')return '<div class="igpostst">'+ic('cal',16)+'<span class="grow"><b>'+(p.at>Date.now()?'Will post to Instagram':'Posting to Instagram…')+'</b><span class="meta" style="display:block">'+esc(igWhen(p.at))+'</span></span><button class="btn sm" data-act="igcancel" data-id="'+id+'" data-arg="'+esc(p.id)+'">Cancel</button></div>';
   let h='';
   if(p&&p.status==='error')h+='<div class="igpostst bad">'+ic('insta',16)+'<span class="grow"><b>Not posted</b><span class="meta" style="display:block">'+esc(p.error)+'</span></span><button class="btn sm sq" data-act="igcancel" data-id="'+id+'" data-arg="'+esc(p.id)+'" aria-label="Dismiss">×</button></div>';
-  if(v.status==='published'&&!p)h+='<p class="meta">This video is marked as published. If it isn’t on Instagram yet, you can post it from here.</p>';
+  if(v.status==='published'&&!p)return h+'<div class="minirow"><button class="lnk" data-act="igpost" data-id="'+id+'">Post to Instagram</button></div>';
+  if(compact&&!(p&&p.status==='error'))return h;
   return h+'<button class="btn wide igbtn" data-act="igpost" data-id="'+id+'">'+ic('insta')+(p&&p.status==='error'?'Try posting again':'Post to Instagram')+'</button>';
 }
 /* ---------- Inspiration ---------- */
@@ -1256,6 +1284,8 @@ function vSettings(){
     (usage&&usage.maxBytes?'<span class="ctitle">Storage</span><p class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used · '+usage.files+' files · '+LIM+' per file</p>':'')+'</section></div>';
 }
 function renderAll(){
+  if(CSC&&CSC.me&&CSC.me.role!=='pending'&&!isAdmin()&&['team','settings','admin'].includes(view))view='videos';
+  if(CSC&&CSC.me&&CSC.me.ws&&view==='clients')view='videos';
   document.body.classList.toggle('authpage',!!(CSC&&(!CSC.me||CSC.me.role==='pending')));
   renderSide();renderTop();
   let html;
@@ -1428,6 +1458,8 @@ document.addEventListener('click',async ev=>{
   const b=ev.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,id=b.dataset.id,v=id?videos.find(x=>x.id===id):null;
   if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin','newinvite','delinspo','igoff'].includes(act)&&armedDelete)armedDelete=null;
+  if(act==='menu'){const sd=$('#side'),o=!sd.classList.contains('open');sd.classList.toggle('open',o);b.setAttribute('aria-expanded',String(o));return}
+  if(b.closest&&b.closest('#side'))$('#side').classList.remove('open');
   if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
   else if(act==='stage'){curStage=b.dataset.stage;go('videos')}
   else if(act==='addws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);renderTop();openDlg('add')}
