@@ -962,21 +962,21 @@ function editCol(v){
   if(okAsset(v.editedAsset))pv='<div class="preview">'+'<button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(v.editedAsset)+'" aria-label="Play video"><span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button>'+'</div>';
   else if(safeUrl(v.editedUrl))pv='<a class="preview" style="text-decoration:none" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener"><span style="display:flex;flex-direction:column;align-items:center;gap:6px">'+ic('link',22)+'<b style="color:var(--blue)">Open edited video ↗</b><span class="meta">'+esc(hostOf(v.editedUrl))+'</span></span></a>';
   else pv='<div class="preview"><span style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px">'+ic('video',22)+'<span>No edited video yet</span></span></div>';
-  let h='<section class="card"><div class="chead"><span class="ctitle">Edited video</span>'+(has?'<span class="badge num">v'+(v.revision||1)+'</span>':'')+'</div>'+pv;
+  let h='<section class="card"><div class="chead"><span class="ctitle">Edited video</span>'+(has?'<span class="badge num">Edited - '+(v.revision||1)+'</span>':'')+'</div>'+pv;
   if(has)h+='<div><b>'+esc(v.title)+' · '+(v.approved||v.status==='published'?'Final cut':'Edit')+'</b>'+(v.editedSize?'<div class="meta">'+fmtSize(v.editedSize)+'</div>':'')+'</div>';
   h+='<div class="row"><span class="badge '+ap[0]+'">'+(ap[0]==='ok'?ic('check',13):'')+ap[1]+'</span>'+(v.deliveredAt&&has?'<span class="meta">Uploaded '+esc(stamp(v.deliveredAt))+(v.editor?' by '+esc(v.editor):'')+'</span>':'')+'</div>';
   if(v.changeNote&&isEditor())h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
   else if(v.changeNote&&stageOf(v)==='reedit')h+='<p class="meta">Sent back to your editor for changes. The new version will appear here.</p>';
   if(v.editorNote&&has)h+='<div class="instr">Editor note: '+esc(v.editorNote)+'</div>';
   if(out)h+='<div class="row" style="justify-content:space-between"><span class="row">'+ic('insta')+'<span><b class="num">'+esc(whenOf(v))+'</b><div class="meta">Instagram'+(hasYt(v)?' · also YouTube':'')+'</div></span></span>'+(canWrite&&v.status==='scheduled'?'<button class="btn sm" data-act="resched" data-id="'+id+'">'+(v.date?'Change':'Set date')+'</button>':'')+'</div>';
-  if(editor&&v.status!=='published')h+='<button class="btn blue wide" data-act="deliver" data-id="'+id+'">'+ic('up')+(has?'Upload new version':'Upload edited video')+'</button>';
+  if(editor&&v.status!=='published')h+='<button class="btn blue wide" data-act="deliver" data-id="'+id+'">'+ic('up')+(has?'Upload next edit':'Upload edited video')+'</button>';
   if(okAsset(v.editedAsset))h+='<button class="btn wide" data-act="dl" data-id="'+id+'">'+ic('down')+'Download</button>';
   if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Mark published</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Request changes</button></div>';
   const prev=(v.edits||[]).slice().reverse();
-  h+='<div><b>Previous versions</b>'+(prev.length?'':'<div class="meta">None yet. Older edits are kept here when a new version is uploaded.</div>')+'</div>';
+  h+='<div><b>Previous edits</b>'+(prev.length?'':'<div class="meta">None yet. Older edits are kept here when a new edit is uploaded.</div>')+'</div>';
   prev.forEach(p=>{const i=(v.edits||[]).indexOf(p);
-    h+='<div class="prev"><span class="pt">'+ic('video',17)+'</span><div class="grow"><b>Version '+esc(p.rev||'')+'</b><div class="meta">'+esc(stamp(p.at))+(p.size?' · '+fmtSize(p.size):'')+'</div></div>'+
-      (okAsset(p.asset)?'<button class="btn sm sq" data-act="dlprev" data-id="'+id+'" data-fi="'+i+'" aria-label="Download version '+esc(p.rev||'')+'">'+ic('down',14)+'</button>':safeUrl(p.url)?'<a class="btn sm sq" href="'+esc(p.url)+'" target="_blank" rel="noopener" aria-label="Open version '+esc(p.rev||'')+'">'+ic('link',14)+'</a>':'')+'</div>'});
+    h+='<div class="prev"><span class="pt">'+ic('video',17)+'</span><div class="grow"><b>Edited - '+esc(p.rev||'')+'</b><div class="meta">'+esc(stamp(p.at))+(p.size?' · '+fmtSize(p.size):'')+'</div></div>'+
+      (okAsset(p.asset)?'<button class="btn sm sq" data-act="dlprev" data-id="'+id+'" data-fi="'+i+'" aria-label="Download Edited - '+esc(p.rev||'')+'">'+ic('down',14)+'</button>':safeUrl(p.url)?'<a class="btn sm sq" href="'+esc(p.url)+'" target="_blank" rel="noopener" aria-label="Open Edited - '+esc(p.rev||'')+'">'+ic('link',14)+'</a>':'')+'</div>'});
   return h+'</section>';
 }
 function vProject(){
@@ -1004,12 +1004,12 @@ function deliverCard(v){
   else if(v.changeNote&&stageOf(v)==='reedit')h+='<p class="meta">Sent back to your editor for changes. The new version will appear here.</p>';
   if(has){
     if(okAsset(v.editedAsset))h+='<div class="pv edpv"><button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(v.editedAsset)+'" aria-label="Play the edited video"><span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button></div>';
-    h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Version '+(v.revision||1)+'</b><div class="meta">'+(out?esc(whenOf(v)):'Previous edit')+'</div></span>'+
+    h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Edited - '+(v.revision||1)+'</b><div class="meta">'+(out?esc(whenOf(v)):'Previous edit')+'</div></span>'+
       (okAsset(v.editedAsset)?'<button class="btn sm sq" data-act="dl" data-id="'+id+'" aria-label="Download edited video" title="Download">'+ic('down',14)+'</button>':'<a class="btn sm sq" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener" aria-label="Open edited video" title="Open link">'+ic('link',14)+'</a>')+'</div>';
   }
   if(editor&&v.status!=='published'){
     const d=v.date||ymd(addDays(new Date(),1)),t=v.time||'18:00';
-    if(assets)h+='<button class="minidrop'+(pend?' picked':'')+'" data-act="pickedit" data-id="'+id+'" data-dz="'+id+'|edited:0">'+ic(pend?'check':'up',16)+'<span>'+(pend?esc(pend.name):(has?'Choose new version':'Choose edited video'))+'</span></button>';
+    if(assets)h+='<button class="minidrop'+(pend?' picked':'')+'" data-act="pickedit" data-id="'+id+'" data-dz="'+id+'|edited:0">'+ic(pend?'check':'up',16)+'<span>'+(pend?esc(pend.name):(has?'Choose next edit':'Choose edited video'))+'</span></button>';
     h+=bigLink()+'<input class="field edLink" data-key="l'+id+'" type="url" placeholder="'+(assets?'or paste a link (over '+LIM+')':'Edited video link')+'" aria-label="Edited video link">'+
       '<p class="err" hidden></p><button class="btn dark wide" data-act="deliverinline" data-arg="now" data-id="'+id+'">'+ic('up')+'Upload now</button>'+
       '<div class="orline"><span>or set the Instagram date</span></div>'+
@@ -1369,7 +1369,7 @@ function openDlg(kind,id,arg){
       '<label>Shares<input id="f-shares" type="number" min="0" step="1" inputmode="numeric" value="'+n(v.shares)+'"></label></div>'+acts('Save');
   }else if((kind==='deliver'||kind==='resched')&&v){
     const d=v.date||ymd(addDays(new Date(),1)),t=v.time||'18:00';
-    h='<h2>'+(kind==='resched'?'Change date and time':hasEdit(v)?'Upload new version':'Upload edited video')+'</h2><p class="meta">'+esc(v.title)+'</p>'+
+    h='<h2>'+(kind==='resched'?'Change date and time':hasEdit(v)?'Upload next edit':'Upload edited video')+'</h2><p class="meta">'+esc(v.title)+'</p>'+
       (kind==='deliver'&&v.changeNote?'<p class="meta" style="color:var(--warn)">Changes requested: '+esc(v.changeNote)+'</p>':'');
     if(kind==='deliver'){
       if(assets)h+='<div><button type="button" class="btn wide" data-pick="f-editedfile">'+ic('up')+'Choose video (up to '+LIM+')</button><div class="picked" id="p-f-editedfile">No file chosen</div><input hidden id="f-editedfile" type="file" aria-label="Edited video file" accept="'+ACCEPT.edited+'"></div>';
