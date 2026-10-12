@@ -515,6 +515,12 @@ a.trow.igrow:hover{background:var(--soft)}
 .lv{background:#fff;border:1px solid #e3efe7;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .lvn{font-size:1.05rem;font-weight:700}
 .lvl{display:flex;align-items:center;gap:4px;font-size:.74rem;color:var(--muted)}
+.pubgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+.pubcard{gap:12px}
+.pubtop{display:flex;gap:12px;align-items:center;min-width:0}
+.pubthumb{flex:none;width:52px;height:68px;border:0;padding:0;border-radius:10px;overflow:hidden;background:var(--soft2);display:grid;place-items:center;color:var(--muted);cursor:pointer}
+.pubthumb .thumbslot canvas{object-fit:cover}
+.pubtitle{display:block;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authswap{margin:0;text-align:center}.authswap .authlink{font-size:inherit;color:var(--ink);font-weight:600;padding:0}
@@ -818,7 +824,7 @@ function renderTop(){
   if(curWs!=='all'&&wsLoaded&&!wsOf(curWs))curWs='all';
   if(document.activeElement!==sel){sel.innerHTML='<option value="all">All clients</option>'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('');sel.value=curWs}
   const v=view==='project'?videos.find(x=>x.id===curVideo):null;
-  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Workspaces',analytics:'Analytics',inspo:'Inspiration',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view])+'</b>';
+  $('#crumbs').innerHTML=v?'<span>Videos</span><span>/</span><b>'+esc(v.title)+'</b>':'<span>Studio</span><span>/</span><b>'+(view==='videos'&&curStage==='published'?'Published':({overview:'Overview',calendar:'Calendar',videos:'Videos',clients:'Workspaces',analytics:'Analytics',inspo:'Inspiration',team:'Team',settings:'Settings',admin:'Admin',project:'Videos'}[view]))+'</b>';
   $('#pname').textContent=who();
   $('#roleSel').value=role;
   if(CSC){const g=isGuest(),sw=false;$('#roleSel').hidden=!sw;const rt=$('#roleTxt');rt.hidden=sw;rt.textContent=CSC.me?roleLabel():'Signed out';$('#signOut').hidden=!CSC.me||g}
@@ -854,6 +860,7 @@ function vCalendar(){
     '<div class="row"><button class="btn sq" data-act="week" data-d="-7" aria-label="Previous week">‹</button><button class="btn" data-act="week" data-d="0">Today</button><button class="btn sq" data-act="week" data-d="7" aria-label="Next week">›</button></div></div><section class="card">'+rows+'</section>';
 }
 function vVideos(){
+  if(curStage==='published')return vPublished();
   const ql=q.toLowerCase();
   const list=inClient().filter(v=>(curStage==='all'||stageOf(v)===curStage)&&(!ql||(v.title||'').toLowerCase().includes(ql)||((wsOf(v.ws)||{}).name||'').toLowerCase().includes(ql)));
   if(role==='editor'){const o={reedit:0,todo:1,scheduled:2,published:3};list.sort((a,b)=>o[stageOf(a)]-o[stageOf(b)])}
@@ -1146,6 +1153,20 @@ function liveBox(v){
   return '<section class="livebox"><div class="chead"><span class="row" style="gap:6px"><i class="livedot"></i><b>Live on Instagram</b></span><span class="meta">'+(v.igAt?'Updated '+esc(ago(v.igAt)):'Loading…')+' · <button class="lnk" data-act="liverefresh" data-id="'+esc(v.id)+'">Refresh</button></span></div>'+
     '<div class="lvgrid">'+t('video','views','Views')+t('heart','likes','Likes')+t('msg','comments','Comments')+t('share','shares','Shares')+t('folder','saves','Saves')+t('user','reach','Reach')+'</div>'+
     (safeUrl(v.igUrl)?'<a class="btn sm wide" href="'+esc(v.igUrl)+'" target="_blank" rel="noopener">'+ic('insta',14)+'Open on Instagram ↗</a>':'')+'</section>';
+}
+function vPublished(){
+  const ql=q.toLowerCase(),list=inClient().filter(v=>stageOf(v)==='published'&&(!ql||(v.title||'').toLowerCase().includes(ql))).sort((a,b)=>(b.publishedAt||0)-(a.publishedAt||0));
+  const live=list.filter(v=>v.igMediaId),sum=k=>live.reduce((n,v)=>n+(typeof v[k]==='number'?v[k]:0),0);
+  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+'</div><h2 class="ptitle">Published</h2><p class="meta">Live numbers for every reel posted from here. They update by themselves.</p></div></div>';
+  if(!list.length)return h+emptyBox('check','Nothing published yet','Videos appear here once they are posted or marked as published.');
+  if(live.length){const k=(icon,key,l)=>'<div class="kpi">'+ic(icon,16)+'<span class="kv num">'+fmtK(sum(key))+'</span><span class="meta">'+l+'</span></div>';
+    h+='<div class="igkpis" style="margin-bottom:16px">'+k('video','views','Views')+k('heart','likes','Likes')+k('msg','comments','Comments')+k('share','shares','Shares')+k('folder','saves','Saves')+'</div>'}
+  h+='<div class="pubgrid">';
+  list.forEach(v=>{const w=wsOf(v.ws),id=esc(v.id);
+    h+='<section class="card pubcard"><div class="pubtop"><button class="pubthumb" data-act="open" data-id="'+id+'" aria-label="Open '+esc(v.title)+'">'+(okAsset(v.editedAsset)?'<span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'"></span>':ic('video',20))+'</button><div style="min-width:0"><b class="pubtitle">'+esc(v.title)+'</b><span class="meta" style="display:block">'+(curWs==='all'&&w?esc(w.name)+' · ':'')+(v.publishedAt?'Posted '+esc(dayOf(v.publishedAt)):'Published')+'</span></div></div>'+
+      (v.igMediaId&&CSC&&CSC.ig?liveBox(v):'<p class="meta">'+(v.igUrl?'':'Marked as published. Live numbers appear for reels posted from here.')+'</p>')+
+      '<button class="btn sm wide" data-act="open" data-id="'+id+'">Open video</button></section>'});
+  return h+'</div>';
 }
 function igPostBox(v,compact){
   const p=igPostOf(v),id=esc(v.id);
