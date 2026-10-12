@@ -398,6 +398,7 @@ div.trow.advrow{cursor:default}
 .pv{position:relative;aspect-ratio:16/9;width:100%;border-radius:10px;overflow:hidden;background:#17140f;display:grid;place-items:center}
 .pv video,.pv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center;display:block;background:#17140f}
 .pv.tall{aspect-ratio:1/1}
+.pv.edpv{aspect-ratio:16/10}.pv.edpv.tall{aspect-ratio:4/5}
 .thumbslot{display:grid;place-items:center;width:100%;height:100%;color:#b9b1a3}
 .thumbslot canvas{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
 .pvposter{position:absolute;inset:0;border:0;padding:0;background:#17140f;cursor:pointer}
@@ -971,6 +972,7 @@ function deliverCard(v){
   let h='<aside class="card deliver" aria-label="Edited video"><div class="chead"><span class="ctitle">Edited video</span><span class="badge '+ap[0]+'">'+ap[1]+'</span></div>';
   if(v.changeNote)h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
   if(has){
+    if(okAsset(v.editedAsset))h+='<div class="pv edpv"><button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(v.editedAsset)+'" aria-label="Play the edited video"><span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button></div>';
     h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Version '+(v.revision||1)+'</b><div class="meta">'+(out?esc(whenOf(v)):'Previous edit')+'</div></span>'+
       (okAsset(v.editedAsset)?'<button class="btn sm sq" data-act="dl" data-id="'+id+'" aria-label="Download edited video" title="Download">'+ic('down',14)+'</button>':'<a class="btn sm sq" href="'+esc(v.editedUrl)+'" target="_blank" rel="noopener" aria-label="Open edited video" title="Open link">'+ic('link',14)+'</a>')+'</div>';
   }
