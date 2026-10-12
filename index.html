@@ -1244,15 +1244,15 @@ function vAdmin(){
   const pend=people.filter(u=>!u.ok).length;
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">People</span><span class="meta">'+(CSC?people.length+(people.length===1?' account':' accounts')+(pend?' · '+pend+' waiting for approval':''):'')+'</span></div>';
   if(CSC){
-    h+='<p class="meta">Editors join with your invite link and wait here until you approve them and choose their client. Clients don’t need an account: send each one their private link from Clients, below.</p>';
+    h+='<p class="meta">Editors join with your invite link and wait here until you approve them and choose their client. To give a partner the same view as you, send them the invite link, then click Make admin. Clients don’t need an account: send each one their private link from Clients, below.</p>';
     if(!peopleLoaded)h+='<p class="meta">Loading people…</p>';
-    else if(!people.some(u=>u.role!=='owner'))h+='<p class="meta">No editors have joined yet.</p>';
+    else if(!people.some(u=>u.role!=='owner'||u.promoted))h+='<p class="meta">No editors have joined yet.</p>';
     else{h+='<div class="table"><div class="trow th acrow pprow"><span>NAME</span><span>ROLE</span><span>CLIENT</span><span>EMAIL</span><span></span></div>';
       people.slice().sort((a,b)=>(a.ok-b.ok)||(b.createdAt-a.createdAt)).forEach(u=>{const w=wsOf(u.ws),ed=u.role==='editor';
         h+='<div class="trow acrow pprow"><span class="t1">'+esc(u.name)+'</span><span><span class="badge'+(u.ok?(ed?' blue':''):' warn')+'">'+(u.ok?(u.role==='owner'?'Admin':ed?'Editor':'Client'):'Waiting')+'</span></span>'+
           '<span class="meta">'+(ed?'<select class="field pplWs" data-id="'+esc(u.id)+'" aria-label="Clients '+esc(u.name)+' can work on"><option value="">All clients</option>'+workspaces.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===u.ws?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>':u.role==='owner'?'All clients':esc(w?w.name:''))+'</span>'+
           '<span class="meta" style="overflow-wrap:anywhere">'+esc(u.email)+'</span><span class="row" style="justify-content:flex-end;flex-wrap:nowrap">'+
-          (u.role==='owner'?'':(u.ok?'':'<button class="btn sm dark" data-act="pplok" data-id="'+esc(u.id)+'">Approve</button>')+'<button class="btn sm" data-act="pplpw" data-id="'+esc(u.id)+'">Reset password</button>'+
+          (u.role==='owner'?(u.promoted?'<button class="btn sm" data-act="ppladm" data-arg="editor" data-id="'+esc(u.id)+'">Remove admin</button>':''):(u.ok?'':'<button class="btn sm dark" data-act="pplok" data-id="'+esc(u.id)+'">Approve</button>')+'<button class="btn sm" data-act="ppladm" data-arg="owner" data-id="'+esc(u.id)+'">Make admin</button>'+'<button class="btn sm" data-act="pplpw" data-id="'+esc(u.id)+'">Reset password</button>'+
           (armedDelete==='pp:'+u.id?'<button class="btn sm danger" data-act="pplrm" data-id="'+esc(u.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="pplrm" data-id="'+esc(u.id)+'" aria-label="Remove '+esc(u.name)+'">'+ic('trash',14)+'</button>'))+'</span></div>'});
       h+='</div>'}
     h+='<p class="err" id="pplErr" hidden></p><div class="frow" style="padding-top:8px;border-top:1px solid var(--line)"><span class="grow meta">To add an editor, send them your team’s invite link. They sign up from it and then wait here for your approval.</span><button class="btn sm dark" data-act="cpjoin">'+ic('link',14)+'Copy editor invite link</button>'+(armedDelete==='jn'?'<button class="btn sm danger" data-act="newjoin">Replace link?</button>':'<button class="btn sm" data-act="newjoin">New link</button>')+'</div>';
@@ -1591,6 +1591,7 @@ document.addEventListener('click',async ev=>{
   else if(act==='nojoin'){location.hash='';location.reload()}
   else if(act==='newlink'){if(armedDelete!=='ln:'+id){armedDelete='ln:'+id;renderAll();return}armedDelete=null;await copyLink(id,true)}
   else if(act==='showpw'){const p=$('#authPw');p.type=p.type==='password'?'text':'password';b.textContent=p.type==='password'?'Show':'Hide'}
+  else if(act==='ppladm'){b.disabled=true;try{await CSC.userUpdate({id,role:b.dataset.arg})}catch(x){pplErr(x)}loadPeople()}
   else if(act==='pplok'){b.disabled=true;try{await CSC.userUpdate({id,ok:true})}catch(x){pplErr(x)}loadPeople()}
   else if(act==='pplpw'){
     const u=people.find(x=>x.id===id),pw=prompt('New password for '+(u?u.name:'this person')+' (at least 6 characters). Tell them the new password yourself.');
