@@ -795,11 +795,11 @@ function readHash(){
 }
 function fullMenu(){return !CSC||!CSC.me||isAdmin()}
 function renderSide(){
-  const list=inClient(),nav=(v,icon,label)=>'<button class="nv'+(view===v||(v==='videos'&&view==='project')?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
+  const list=inClient(),pv=view==='project'?videos.find(x=>x.id===curVideo):null,selStage=view==='project'?(pv?stageOf(pv):''):view==='videos'?curStage:'',nav=(v,icon,label)=>'<button class="nv'+(view===v&&!(v==='videos'&&curStage!=='all')||(v==='videos'&&view==='project'&&!pv)?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
   const full=fullMenu(),many=true;
   let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1><button type="button" class="menubtn" data-act="menu" aria-label="Menu" aria-expanded="false">'+ic('menu',20)+'</button></div><div class="slabel">MAIN</div>'+
     (many?nav('clients','folder','Workspaces'):'')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+nav('inspo','heart','Inspiration')+'<div class="slabel">WORKFLOW</div>';
-  STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
+  STAGES.forEach(([k,label])=>{h+='<button class="nv'+(selStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
   h+='<div class="slabel">SETTINGS</div>'+(full?nav('team','team','Team'):'')+nav('settings','gear','Settings');
   const adminNav=full&&(CSC||isAdmin())?'<div class="sidebot">'+nav('admin','check','Admin')+'</div>':'';
   if(usage&&usage.maxBytes){const pct=Math.min(100,Math.round(usage.bytes/usage.maxBytes*100));
