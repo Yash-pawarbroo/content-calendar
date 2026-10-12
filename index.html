@@ -974,7 +974,7 @@ function projectBlock(v,single){
 }
 function deliverCard(v){
   const id=esc(v.id),owner=isOwner(),editor=isEditor(),has=hasEdit(v),out=isOut(v),ap=approval(v),pend=pendingEdit[v.id];
-  let h='<aside class="card deliver" aria-label="Edited video"><div class="chead"><span class="ctitle">Edited video</span><span class="badge '+ap[0]+'">'+ap[1]+'</span></div>';
+  let h='<aside class="card deliver" aria-label="Edited video"><div class="chead"><span class="ctitle">Edited video</span>'+statusPick(v)+'</div>';
   if(v.changeNote)h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
   if(has){
     if(okAsset(v.editedAsset))h+='<div class="pv edpv"><button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(v.editedAsset)+'" aria-label="Play the edited video"><span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button></div>';
@@ -994,6 +994,7 @@ function deliverCard(v){
   if(owner&&has&&CSC&&CSC.ig)h+=igPostBox(v);
   return h+'</aside>';
 }
+const PICK=[['reedit','Re-edit'],['edited','Edited'],['approved','Approved'],['published','Published']],PCOL={reedit:['#fff4e0','#a85a08'],edited:['#f3e9df','#8a4a14'],approved:['#e8f0fb','#1d4e89'],published:['#e9f6ee','#1f7a45']};function pickOf(v){return v.status==='published'?'published':isOut(v)?(v.approved?'approved':'edited'):v.changeNote?'reedit':'edited'}function statusPick(v){const ap=approval(v);if(!canWrite||!hasEdit(v)||!(isClient()||isAdmin()))return '<span class="badge '+ap[0]+'">'+ap[1]+'</span>';const cur=pickOf(v),c=PCOL[cur];return '<select aria-label="Change status" data-id="'+esc(v.id)+'" onchange="cscSetStatus(this)" style="border:0;border-radius:6px;height:24px;padding:0 6px;font-size:.76rem;font-weight:600;cursor:pointer;background:'+c[0]+';color:'+c[1]+'">'+PICK.map(([k,l])=>'<option value="'+k+'"'+(k===cur?' selected':'')+'>'+l+'</option>').join('')+'</select>'}window.cscSetStatus=async function(el){const v=videos.find(x=>x.id===el.dataset.id);if(!v)return;const P={reedit:{status:'todo',approved:false,changeNote:v.changeNote||'Changes requested by '+who()},edited:{status:'scheduled',approved:false,changeNote:''},approved:{status:'scheduled',approved:true,changeNote:''},published:{status:'published',approved:true,changeNote:'',publishedAt:Date.now()}}[el.value];if(!P)return;el.disabled=true;await patchVideo(v.id,P);el.disabled=false};
 function noteCard(v){
   const id=esc(v.id),notes=(v.thread||[]).slice(-12);
   return '<aside class="neo notesbox" aria-label="Notes"><div class="chead"><span class="ctitle">Notes</span><span class="meta">'+(notes.length||'')+'</span></div>'+
