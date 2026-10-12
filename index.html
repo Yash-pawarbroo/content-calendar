@@ -30,6 +30,8 @@
     start:function(ws){return api('/api/ig/start',{method:'POST',body:JSON.stringify({ws:ws,back:location.origin+location.pathname})})},
     posts:function(ws){return api('/api/ig/posts?ws='+encodeURIComponent(ws))},publish:function(o){return api('/api/ig/publish',{method:'POST',body:JSON.stringify(o)})},step:function(ws,id){return api('/api/ig/post-step',{method:'POST',body:JSON.stringify({ws:ws,id:id})})},cancel:function(ws,id){return api('/api/ig/post-cancel',{method:'POST',body:JSON.stringify({ws:ws,id:id})})},
     sync:function(ws){return api('/api/ig/sync',{method:'POST',body:JSON.stringify({ws:ws})})},disconnect:function(ws){return api('/api/ig/disconnect',{method:'POST',body:JSON.stringify({ws:ws})})}};
+  window.CSC.project=function(name){return api('/api/project',{method:'POST',body:JSON.stringify({name:name})})};
+  window.CSC.joinProject=function(code){return api('/api/join',{method:'POST',body:JSON.stringify({code:code})})};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
   window.CSC.teams=function(){return api('/api/teams')};
   window.CSC.joinInfo=function(code){return fetch(BASE+'/api/join-info?code='+encodeURIComponent(code)).then(function(r){return r.ok?r.json():null},function(){return null})};
@@ -787,7 +789,7 @@ function readHash(){
 function fullMenu(){return !CSC||!CSC.me||isAdmin()}
 function renderSide(){
   const list=inClient(),nav=(v,icon,label)=>'<button class="nv'+(view===v||(v==='videos'&&view==='project')?' on':'')+'" data-act="nav" data-view="'+v+'">'+ic(icon,17)+'<span class="lbl">'+label+'</span></button>';
-  const full=fullMenu(),many=!(CSC&&CSC.me&&CSC.me.ws);
+  const full=fullMenu(),many=true;
   let h='<div class="brand"><span class="mark">'+ic('video',14)+'</span><h1>Content Scheduling Calendar</h1><button type="button" class="menubtn" data-act="menu" aria-label="Menu" aria-expanded="false">'+ic('menu',20)+'</button></div><div class="slabel">MAIN</div>'+
     (many?nav('clients','folder','Workspaces'):'')+nav('videos','video','Videos')+nav('overview','home','Overview')+nav('analytics','chart','Analytics')+nav('inspo','heart','Inspiration')+'<div class="slabel">WORKFLOW</div>';
   STAGES.forEach(([k,label])=>{h+='<button class="nv'+(view==='videos'&&curStage===k?' on':'')+'" data-act="stage" data-stage="'+k+'"><i class="dot d-'+k+'"></i><span class="lbl">'+label+'</span><span class="cnt">'+list.filter(v=>stageOf(v)===k).length+'</span></button>'});
@@ -848,7 +850,7 @@ function vVideos(){
   const ql=q.toLowerCase();
   const list=inClient().filter(v=>(curStage==='all'||stageOf(v)===curStage)&&(!ql||(v.title||'').toLowerCase().includes(ql)||((wsOf(v.ws)||{}).name||'').toLowerCase().includes(ql)));
   if(role==='editor'){const o={reedit:0,todo:1,scheduled:2,published:3};list.sort((a,b)=>o[stageOf(a)]-o[stageOf(b)])}
-  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+(CSC&&CSC.me&&CSC.me.ws&&canWrite&&wsOf(CSC.me.ws)?' <button class="lnk renlnk" data-act="renws" data-id="'+esc(CSC.me.ws)+'">Rename</button>':'')+'</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row">'+
+  let h='<div class="pagehead"><div><div class="eyebrow">'+esc(curWs!=='all'&&wsOf(curWs)?wsOf(curWs).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+(CSC&&CSC.me&&!isAdmin()&&canWrite&&curWs!=='all'&&wsOf(curWs)?' <button class="lnk renlnk" data-act="renws" data-id="'+esc(curWs)+'">Rename</button>':'')+'</div><h2 class="ptitle">Videos</h2><p class="meta">A-roll, B-roll and script for every video.</p></div><div class="row">'+
     (isClient()?'<button class="btn" data-act="cpinvite">'+ic('link')+'Invite your editor</button>':'')+(isOwner()?'<button class="btn dark" data-act="add">'+ic('plus')+'New video</button>':'')+'</div></div>';
   if(isClient()&&inviteUrl)h+='<section class="card invitebox"><div class="chead"><span class="ctitle">Your editor’s invite link</span><button class="btn sm" data-act="hideinvite">Close</button></div><p class="meta">Send this link to your editor. They sign up from it and can start on your videos straight away. Share it only with your editor.</p><div class="row" style="flex-wrap:nowrap"><input class="field grow" readonly value="'+esc(inviteUrl)+'" aria-label="Editor invite link" onfocus="this.select()"><button class="btn sm dark" data-act="cpinvite">Copy</button>'+(armedDelete==='inv'?'<button class="btn sm danger" data-act="newinvite">Replace link?</button>':'<button class="btn sm" data-act="newinvite">New link</button>')+'</div></section>';
   if(!list.length)return h+emptyBox('video',q?'No matches':'No videos here yet',q?'Nothing matches “'+esc(q)+'”.':'Videos appear here when they are added.',isOwner()&&!q?'<button class="btn sm" data-act="add">'+ic('plus',14)+'New video</button>':'');
@@ -1033,14 +1035,14 @@ function noteCard(v){
 }
 function vClients(){
   const adm=isAdmin();
-  let h='<div class="pagehead"><div><div class="eyebrow">YOUR STUDIO</div><h2 class="ptitle">Workspaces</h2><p class="meta">Each client has their own workspace. Open one to see its videos, upload files and deliver edits.</p></div><div class="row">'+(isOwner()&&workspaces.length===1?'<button class="btn dark" data-act="addws" data-ws="'+esc(workspaces[0].id)+'">'+ic('plus')+'New video</button>':'')+(adm?'<button class="btn'+(workspaces.length===1?'':' dark')+'" data-act="new-ws">'+ic('plus')+'New workspace</button>':'')+'</div></div>';
+  let h='<div class="pagehead"><div><div class="eyebrow">YOUR STUDIO</div><h2 class="ptitle">Workspaces</h2><p class="meta">'+(isClient()?'Each project has its own videos, editor and Instagram. Add a project and invite an editor to it.':CSC&&CSC.me&&CSC.me.role==='editor'?'The projects you work on. To work on another client’s project, paste their editor invite link with Join a project.':'Each client has their own workspace. Open one to see its videos, upload files and deliver edits.')+'</p></div><div class="row">'+(isOwner()&&workspaces.length===1?'<button class="btn dark" data-act="addws" data-ws="'+esc(workspaces[0].id)+'">'+ic('plus')+'New video</button>':'')+(adm?'<button class="btn'+(workspaces.length===1?'':' dark')+'" data-act="new-ws">'+ic('plus')+'New workspace</button>':isClient()?'<button class="btn'+(workspaces.length===1?'':' dark')+'" data-act="new-ws">'+ic('plus')+'New project</button>':CSC&&CSC.me&&CSC.me.role==="editor"?'<button class="btn" data-act="joinproj">'+ic('link')+'Join a project</button>':'')+'</div></div>';
   if(!workspaces.length)return h+emptyBox('user','No workspaces yet',adm?'Create a workspace for your first client.':'Workspaces appear here when you are added to a client.',adm?'<button class="btn sm" data-act="new-ws">'+ic('plus',14)+'New workspace</button>':'');
   h+='<div class="wsgrid">';
   workspaces.forEach(w=>{const l=videos.filter(v=>v.ws===w.id),c=k=>l.filter(v=>stageOf(v)===k).length,st=(n,t)=>'<span class="wsstat"><b class="num">'+n+'</b><span>'+t+'</span></span>';
     h+='<section class="card wscard"><div class="chead"><span class="row" style="flex-wrap:nowrap;min-width:0"><span class="wsmark">'+esc((w.name||'?').trim().charAt(0).toUpperCase())+'</span><span style="min-width:0"><b class="wsname">'+esc(w.name)+'</b><span class="meta" style="display:block">'+l.length+(l.length===1?' video':' videos')+'</span></span></span>'+((CSC?canWrite&&CSC.me&&CSC.me.role!=='pending':adm)?'<button class="btn sm sq" data-act="renws" data-id="'+esc(w.id)+'" aria-label="Rename '+esc(w.name)+'" title="Rename">'+ic('edit',14)+'</button>':'')+'</div>'+
       '<div class="wsstats">'+st(c('todo')+c('reedit'),'To edit')+st(c('review'),'Edited')+st(c('scheduled'),'Scheduled')+st(c('published'),'Published')+'</div>'+
       (isOwner()?'<div class="two"><button class="btn dark" data-act="ws" data-ws="'+esc(w.id)+'">Open workspace</button><button class="btn" data-act="addws" data-ws="'+esc(w.id)+'">'+ic('plus')+'New video</button></div>':'<button class="btn dark wide" data-act="ws" data-ws="'+esc(w.id)+'">Open workspace</button>')+
-      (adm&&CSC?'<div class="two"><button class="btn sm" data-act="cplink" data-id="'+esc(w.id)+'">'+ic('link',14)+'Client link</button><button class="btn sm" data-act="cpinvite" data-id="'+esc(w.id)+'">'+ic('link',14)+'Editor link</button></div>':'')+'</section>'});
+      (adm&&CSC?'<div class="two"><button class="btn sm" data-act="cplink" data-id="'+esc(w.id)+'">'+ic('link',14)+'Client link</button><button class="btn sm" data-act="cpinvite" data-id="'+esc(w.id)+'">'+ic('link',14)+'Editor link</button></div>':isClient()?'<button class="btn sm wide" data-act="cpinvite" data-id="'+esc(w.id)+'">'+ic('link',14)+'Copy editor invite link</button>':'')+'</section>'});
   return h+'</div>';
 }
 /* ---------- Instagram ---------- */
@@ -1289,7 +1291,6 @@ function vSettings(){
 }
 function renderAll(){
   if(CSC&&CSC.me&&CSC.me.role!=='pending'&&!isAdmin()&&['team','admin'].includes(view))view='videos';
-  if(CSC&&CSC.me&&CSC.me.ws&&view==='clients')view='videos';
   document.body.classList.toggle('authpage',!!(CSC&&(!CSC.me||CSC.me.role==='pending')));
   renderSide();renderTop();
   let html;
@@ -1329,7 +1330,7 @@ function openDlg(kind,id,arg){
   dlgKind=kind;dlgId=id||null;dlgArg=arg||null;
   const v=id?videos.find(x=>x.id===id):null,f=$('#dlgForm');let h='';
   if(kind==='new-ws'){
-    h='<h2>New client</h2><label>Client or team name<input id="f-name" required maxlength="60" placeholder="e.g. CapGown"></label>'+acts('Add client');
+    h=isClient()?'<h2>New project</h2><p class="meta">A separate space with its own videos, editor and Instagram account. Your editor link for it is on the Workspaces page.</p><label>Project name<input id="f-name" required maxlength="60" placeholder="e.g. Capgown Podcast"></label>'+acts('Create project'):'<h2>New client</h2><label>Client or team name<input id="f-name" required maxlength="60" placeholder="e.g. CapGown"></label>'+acts('Add client');
   }else if(kind==='renws'){
     const w=wsOf(id);if(!w)return;
     h='<h2>Rename client</h2><label>Client name<input id="f-name" required maxlength="60" value="'+esc(w.name)+'"></label>'+acts('Save');
@@ -1406,7 +1407,8 @@ function pickFiles(id,arg){
 $('#dlgForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   if(dlgKind==='new-ws'){
-    const name=val('f-name');if(!name)return formErr('Enter a name for the client.');
+    const name=val('f-name');if(!name)return formErr(isClient()?'Enter a name for the project.':'Enter a name for the client.');
+    if(CSC&&isClient()){busy('Creating…');try{const r=await CSC.project(name);LS.set('csc.ws',r.id);location.hash='#videos';location.reload()}catch(x){formErr(x.message||'The project could not be created.')}return}
     const id=newId('w');await putWs(id,{name,createdAt:Date.now()});
     curWs=id;LS.set('csc.ws',id);closeDlg();renderAll();
   }else if(dlgKind==='igpost'){
@@ -1524,7 +1526,8 @@ document.addEventListener('click',async ev=>{
   }
   else if(act==='recheck')location.reload();
   else if(act==='cplink')await copyLink(id,false);
-  else if(act==='cpinvite')await copyInvite(id||'',false);
+  else if(act==='cpinvite')await copyInvite(id||(curWs!=='all'?curWs:''),false);
+  else if(act==='joinproj'){const u=prompt('Paste the editor invite link the client sent you');const m=/#join=(e_[0-9a-z_]+)/.exec(u||'');if(u){if(!m)return notice('That is not an editor invite link. It should contain #join=');try{const r=await CSC.joinProject(m[1]);LS.set('csc.ws',r.ws);notice('You joined '+r.name+'.');setTimeout(()=>location.reload(),800)}catch(x){notice(x.message||'That link did not work.')}}}
   else if(act==='newinvite'){if(armedDelete!=='inv'){armedDelete='inv';renderAll();return}armedDelete=null;await copyInvite(id||'',true)}
   else if(act==='hideinvite'){inviteUrl='';renderAll()}
   else if(act==='cpjoin')await copyJoin(false);
@@ -1665,7 +1668,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^in(Url|Note)$/.tes
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
 $('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
 $('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDlg()});
-window.addEventListener('hashchange',()=>{readHash();renderAll()});
+function autoJoin(jc){
+  const had=(CSC.me.wss||[]).slice();try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+  CSC.joinProject(jc).then(r=>{if(!had.length||had.includes(r.ws)){if(had.includes(r.ws)){curWs=r.ws;LS.set('csc.ws',r.ws);go('videos')}return}LS.set('csc.ws',r.ws);notice('You joined '+r.name+'. It is now in your Workspaces.');try{history.replaceState(null,'',location.pathname+'#clients')}catch(e){}setTimeout(()=>location.reload(),1200)},x=>notice(x.message||'That invite link did not work.'));
+}
+window.addEventListener('hashchange',()=>{const m=/^#join=(e_[0-9a-z_]{10,60})$/.exec(location.hash);if(m&&CSC&&CSC.me&&CSC.me.role==='editor'){autoJoin(m[1]);return}readHash();renderAll()});
 
 /* ---------- boot ---------- */
 readHash();if(!role)role='owner';renderAll();
@@ -1681,8 +1688,8 @@ try{const qm=new URLSearchParams(location.search).get('ig');if(qm){notice(qm);hi
       if(user){
         const w=await user.can('data.write');if(w===false){canWrite=false;if(!CSC)notice('You have view-only access to this workspace.')}
         if(CSC&&CSC.me&&CSC.me.role==='owner')role='owner';
-        if(CSC&&CSC.me&&!CSC.me.ws&&CSC.me.role!=='pending'&&!/^#(v-|[a-z]+$)/.test(location.hash||'')){view='clients'}
-        if(CSC&&CSC.me&&CSC.me.role!=='guest'&&CSC.me.role!=='owner'){role=CSC.me.role==='editor'?'editor':'owner';if(CSC.me.ws){curWs=CSC.me.ws}}
+        if(CSC&&CSC.me&&CSC.me.role!=='pending'&&(CSC.me.wss||[]).length!==1&&!/^#(v-|[a-z]+$)/.test(location.hash||'')){view='clients'}
+        if(CSC&&CSC.me&&CSC.me.role!=='guest'&&CSC.me.role!=='owner'){role=CSC.me.role==='editor'?'editor':'owner';const L=CSC.me.wss||[];if(L.length&&!L.includes(curWs))curWs=L.length===1?L[0]:'all'}
         try{const me=await user.me();profileName=me.name||'';if(me.avatarUrl){const a=$('#avatar');a.src=me.avatarUrl;a.hidden=false}
           if(!CSC&&!LS.get('csc.role','')){role=me.isOwner?'owner':'editor'}}catch(e){}
       }
@@ -1691,6 +1698,7 @@ try{const qm=new URLSearchParams(location.search).get('ig');if(qm){notice(qm);hi
   if(!db){wsLoaded=vidLoaded=true;notice('Saving is not available in this view, so changes stay on this screen only. Sign in to Claude to save and share them.');renderAll();return}
   renderAll();refreshUsage();
   const onErr=()=>notice('The live connection stopped. Reload the page to reconnect.');
+  if(CSC&&CSC.join&&CSC.me&&CSC.me.role==='editor'&&/^e_/.test(CSC.join)){const jc=CSC.join;CSC.join='';autoJoin(jc)}
   if(CSC&&CSC.join&&!CSC.me){authMode='signup';CSC.joinInfo(CSC.join).then(j=>{joinName=j?j.name:'';joinAuto=!!(j&&j.auto);joinBad=!j;renderAll()})}
   loadPeople();setInterval(()=>{if(view==='admin'&&!document.hidden)loadPeople()},20000);
   db.collection('workspaces').onSnapshot(s=>{workspaces=s.docs.map(d=>Object.assign({},d.data(),{id:d.id})).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));wsLoaded=true;renderAll()},onErr);
