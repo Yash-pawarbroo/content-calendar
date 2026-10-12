@@ -1300,7 +1300,7 @@ function openDlg(kind,id,arg){
     const w=wsOf(id);if(!w)return;
     h='<h2>Rename client</h2><label>Client name<input id="f-name" required maxlength="60" value="'+esc(w.name)+'"></label>'+acts('Save');
   }else if(kind==='add'){
-    h='<h2>New video</h2><label>Client<select id="f-ws">'+wsOptions(curWs)+'</select></label>'+
+    h='<h2>New video</h2><label'+(workspaces.length===1?' hidden':'')+'>Client<select id="f-ws">'+wsOptions(curWs)+'</select></label>'+
       '<label>Title<input id="f-title" required maxlength="120" placeholder="e.g. GRWM video"></label>'+
       '<label>Editing instructions (optional)<textarea id="f-notes" rows="3" maxlength="2000" placeholder="Hook, style, length, music…"></textarea></label>'+
       '<label class="chk"><input type="checkbox" id="f-yt"> Also post on YouTube</label>'+acts('Create video');
