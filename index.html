@@ -966,7 +966,7 @@ function editCol(v){
   if(has)h+='<div><b>'+esc(v.title)+' · '+(v.approved||v.status==='published'?'Final cut':'Edit')+'</b>'+(v.editedSize?'<div class="meta">'+fmtSize(v.editedSize)+'</div>':'')+'</div>';
   h+='<div class="row"><span class="badge '+ap[0]+'">'+(ap[0]==='ok'?ic('check',13):'')+ap[1]+'</span>'+(v.deliveredAt&&has?'<span class="meta">Uploaded '+esc(stamp(v.deliveredAt))+(v.editor?' by '+esc(v.editor):'')+'</span>':'')+'</div>';
   if(v.changeNote&&isEditor())h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
-  else if(v.changeNote&&stageOf(v)==='reedit')h+='<p class="meta">Sent back to your editor for changes. The new version will appear here.</p>';
+  else if(v.changeNote&&stageOf(v)==='reedit')h+='<p class="meta">Sent back to your editor for changes. The new edit will appear here.</p>';
   if(v.editorNote&&has)h+='<div class="instr">Editor note: '+esc(v.editorNote)+'</div>';
   if(out)h+='<div class="row" style="justify-content:space-between"><span class="row">'+ic('insta')+'<span><b class="num">'+esc(whenOf(v))+'</b><div class="meta">Instagram'+(hasYt(v)?' · also YouTube':'')+'</div></span></span>'+(canWrite&&v.status==='scheduled'?'<button class="btn sm" data-act="resched" data-id="'+id+'">'+(v.date?'Change':'Set date')+'</button>':'')+'</div>';
   if(editor&&v.status!=='published')h+='<button class="btn blue wide" data-act="deliver" data-id="'+id+'">'+ic('up')+(has?'Upload next edit':'Upload edited video')+'</button>';
@@ -1001,7 +1001,7 @@ function deliverCard(v){
   const id=esc(v.id),owner=isOwner(),editor=isEditor(),has=hasEdit(v),out=isOut(v),ap=approval(v),pend=pendingEdit[v.id];
   let h='<aside class="card deliver" aria-label="Edited video"><div class="chead"><span class="ctitle">Edited video</span>'+statusPick(v)+'</div>';
   if(v.changeNote&&isEditor())h+='<div class="instr" style="color:var(--warn);background:var(--warn-soft)">Changes requested: '+esc(v.changeNote)+'</div>';
-  else if(v.changeNote&&stageOf(v)==='reedit')h+='<p class="meta">Sent back to your editor for changes. The new version will appear here.</p>';
+  else if(v.changeNote&&stageOf(v)==='reedit')h+='<p class="meta">Sent back to your editor for changes. The new edit will appear here.</p>';
   if(has){
     if(okAsset(v.editedAsset))h+='<div class="pv edpv"><button type="button" class="pvposter" data-act="playpv" data-asset="'+esc(v.editedAsset)+'" aria-label="Play the edited video"><span class="thumbslot" data-thumb="'+esc(v.editedAsset)+'" data-big="1"></span><span class="pvplay"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button></div>';
     h+='<div class="frow"><span class="mini">'+ic('video',16)+'</span><span class="grow"><b>Edited - '+(v.revision||1)+'</b><div class="meta">'+(out?esc(whenOf(v)):'Previous edit')+'</div></span>'+
