@@ -991,6 +991,7 @@ function deliverCard(v){
       '<button class="btn wide" data-act="deliverinline" data-arg="schedule" data-id="'+id+'">'+ic('cal')+'Upload and schedule</button>';
   }else if(!has)h+='<p class="meta">'+(owner?'Your editor uploads the edit here with a date and time.':'No edit yet.')+'</p>';
   if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Publish</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Changes</button></div>'+(v.date?'':'<button class="btn wide" data-act="resched" data-id="'+id+'">'+ic('cal')+'Set the Instagram date</button>');
+  if(owner&&has&&v.status==='published')h+='<button class="btn wide" data-act="reedit" data-id="'+id+'">'+ic('edit')+'Request a re-edit</button>';
   if(owner&&has&&CSC&&CSC.ig)h+=igPostBox(v);
   return h+'</aside>';
 }
