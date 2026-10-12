@@ -34,6 +34,7 @@
   window.CSC.joinProject=function(code){return api('/api/join',{method:'POST',body:JSON.stringify({code:code})})};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
   window.CSC.teams=function(){return api('/api/teams')};
+  window.CSC.agencyJoin=function(id){return api('/api/agency-join',{method:'POST',body:JSON.stringify({id:id})})};
   window.CSC.joinInfo=function(code){return fetch(BASE+'/api/join-info?code='+encodeURIComponent(code)).then(function(r){return r.ok?r.json():null},function(){return null})};
   window.CSC.users=function(){return api('/api/users').then(function(j){return j.users})};
   window.CSC.userUpdate=function(o){return api('/api/user-update',{method:'POST',body:JSON.stringify(o)})};
@@ -458,7 +459,7 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .rolepick button span{color:var(--muted,#6b6459);font-size:.8rem}
 .rolepick button.on{border-color:var(--ink);background:var(--soft)}
 .pwrow{display:flex;gap:8px;align-items:center}
-.trow.agrow{grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) 110px 120px !important;cursor:default}
+.trow.agrow{grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) 100px 100px 150px !important;cursor:default;align-items:center}
 .invitebox{margin-bottom:14px}
 .wsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 .wscard{gap:14px}
@@ -1262,7 +1263,7 @@ function vAdmin(){
   {const rq=Object.keys(igReqs).filter(k=>igReqs[k].status==='requested'&&wsOf(k));if(CSC&&rq.length){h+='<section class="card" style="margin-bottom:14px;border-color:#e7d3b5;background:#fffaf2"><div class="chead"><span class="ctitle">Instagram access requests</span><span class="meta">'+rq.length+' waiting</span></div><p class="meta">Add each username as an Instagram Tester in your Meta app (App roles → Roles → Add People → Instagram Tester), then press Mark as added.</p>'+rq.map(k=>'<div class="frow" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>@'+esc(igReqs[k].username)+'</b> <span class="meta">'+esc(wsOf(k).name)+'</span></span><button class="btn sm" data-act="igcopyu" data-arg="'+esc(igReqs[k].username)+'">Copy username</button><a class="btn sm" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta apps ↗</a><button class="btn sm dark" data-act="igreqdone" data-id="'+esc(k)+'">Mark as added</button></div>').join('')+'</section>'}}
   if(CSC&&CSC.me&&CSC.me.site&&agencies){h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Agencies on this site</span><span class="meta">'+agencies.teams.length+(agencies.teams.length===1?' agency':' agencies')+' · all share the same storage</span></div>';
     if(!agencies.teams.length)h+='<p class="meta">No other agency has created a workspace yet. Only you see this list.</p>';
-    else{h+='<div class="table"><div class="trow th agrow"><span>AGENCY</span><span>ADMIN EMAIL</span><span>JOINED</span><span>STORAGE USED</span></div>';agencies.teams.slice().sort((a,b)=>b.createdAt-a.createdAt).forEach(t=>{h+='<div class="trow agrow"><span class="t1">'+esc(t.name)+'</span><span class="meta" style="overflow-wrap:anywhere">'+esc(t.email)+'</span><span class="meta">'+(t.createdAt?new Date(t.createdAt).toLocaleDateString():'')+'</span><span class="meta num">'+(fmtSize(t.bytes)||'0 KB')+'</span></div>'});h+='</div><p class="meta">You can’t open another agency’s videos. Only you see this list.</p>'}
+    else{h+='<div class="table"><div class="trow th agrow"><span>AGENCY</span><span>ADMIN EMAIL</span><span>JOINED</span><span>STORAGE USED</span><span></span></div>';agencies.teams.slice().sort((a,b)=>b.createdAt-a.createdAt).forEach(t=>{h+='<div class="trow agrow"><span class="t1">'+esc(t.name)+'</span><span class="meta" style="overflow-wrap:anywhere">'+esc(t.email)+'</span><span class="meta">'+(t.createdAt?new Date(t.createdAt).toLocaleDateString():'')+'</span><span class="meta num">'+(fmtSize(t.bytes)||'0 KB')+'</span><span style="text-align:right"><button class="btn sm" data-act="agjoin" data-id="'+esc(t.id)+'" data-name="'+esc(t.email||t.name)+'">Add as admin</button></span></div>'});h+='</div><p class="meta">You can’t open another agency’s videos. Only you see this list. If someone signed up here but should see your clients and analytics, click Add as admin. Their own empty agency is closed.</p>'}
     h+='</section>'}
   h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Videos and storage</span><span class="meta">'+vs.length+(vs.length===1?' video':' videos')+(tot?' · '+fmtSize(tot)+' in uploaded files':'')+(usage&&usage.maxBytes?' · '+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used':'')+'</span></div>';
   if(!vs.length)h+='<p class="meta">No videos yet.</p>';
@@ -1591,6 +1592,7 @@ document.addEventListener('click',async ev=>{
   else if(act==='nojoin'){location.hash='';location.reload()}
   else if(act==='newlink'){if(armedDelete!=='ln:'+id){armedDelete='ln:'+id;renderAll();return}armedDelete=null;await copyLink(id,true)}
   else if(act==='showpw'){const p=$('#authPw');p.type=p.type==='password'?'text':'password';b.textContent=p.type==='password'?'Show':'Hide'}
+  else if(act==='agjoin'){if(!confirm('Make '+b.dataset.name+' an admin of your workspace? They will see all your clients, videos and analytics, and their own agency here will be closed.'))return;b.disabled=true;try{await CSC.agencyJoin(id);notice('Done. They now see your workspace. Ask them to refresh the page.')}catch(x){fail(x)}if(CSC.teams)CSC.teams().then(r=>{agencies=r;renderAll()},()=>{});peopleLoaded=false;loadPeople()}
   else if(act==='ppladm'){b.disabled=true;try{await CSC.userUpdate({id,role:b.dataset.arg})}catch(x){pplErr(x)}loadPeople()}
   else if(act==='pplok'){b.disabled=true;try{await CSC.userUpdate({id,ok:true})}catch(x){pplErr(x)}loadPeople()}
   else if(act==='pplpw'){
