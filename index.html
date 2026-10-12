@@ -28,6 +28,7 @@
   window.CSC.invite=function(ws,renew){return api('/api/invite',{method:'POST',body:JSON.stringify({ws:ws||'',renew:!!renew})}).then(function(j){return j.token})};
   window.CSC.ig={status:function(ws){return api('/api/ig/status?ws='+encodeURIComponent(ws))},index:function(ws){return api('/api/ig/index?ws='+encodeURIComponent(ws))},page:function(ws,k){return api('/api/ig/page?ws='+encodeURIComponent(ws)+'&k='+k)},
     start:function(ws){return api('/api/ig/start',{method:'POST',body:JSON.stringify({ws:ws,back:location.origin+location.pathname})})},
+    posts:function(ws){return api('/api/ig/posts?ws='+encodeURIComponent(ws))},publish:function(o){return api('/api/ig/publish',{method:'POST',body:JSON.stringify(o)})},step:function(ws,id){return api('/api/ig/post-step',{method:'POST',body:JSON.stringify({ws:ws,id:id})})},cancel:function(ws,id){return api('/api/ig/post-cancel',{method:'POST',body:JSON.stringify({ws:ws,id:id})})},
     sync:function(ws){return api('/api/ig/sync',{method:'POST',body:JSON.stringify({ws:ws})})},disconnect:function(ws){return api('/api/ig/disconnect',{method:'POST',body:JSON.stringify({ws:ws})})}};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
   window.CSC.teams=function(){return api('/api/teams')};
@@ -485,6 +486,10 @@ a.trow.igrow:hover{background:var(--soft)}
 .inspolink{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;border-radius:10px;background:var(--soft);color:var(--ink);text-decoration:none;text-align:center;padding:14px;overflow-wrap:anywhere}
 .inspnote{font-size:.95rem}
 @media(max-width:860px){.igkpis{grid-template-columns:repeat(2,minmax(0,1fr))}.inform,.inform:has(#inWs){grid-template-columns:1fr}.trow.igrow{grid-template-columns:minmax(0,1fr) repeat(3,auto)}.trow.igrow>:nth-child(n+3){display:block}.trow.igrow>[data-l=reach],.trow.igrow>[data-l=shares],.trow.igrow>[data-l=saves]{display:none}.trow.th.igrow{display:none}}
+.igpostst{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--soft)}
+.igpostst.ok{background:var(--ok-soft);border-color:#cfe9d8}
+.igpostst.ok b{color:var(--ok)}
+.igpostst.bad{background:var(--warn-soft);border-color:#f3dcb4}
 .clientnote{display:flex;gap:10px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.86rem;color:var(--muted)}
 .clientnote b{color:var(--ink)}
 .authswap{margin:0;text-align:center}.authswap .authlink{font-size:inherit;color:var(--ink);font-weight:600;padding:0}
@@ -986,6 +991,7 @@ function deliverCard(v){
       '<button class="btn wide" data-act="deliverinline" data-arg="schedule" data-id="'+id+'">'+ic('cal')+'Upload and schedule</button>';
   }else if(!has)h+='<p class="meta">'+(owner?'Your editor uploads the edit here with a date and time.':'No edit yet.')+'</p>';
   if(owner&&out&&v.status==='scheduled')h+='<div class="two">'+(v.approved?'<button class="btn dark" data-act="publish" data-id="'+id+'">Publish</button>':'<button class="btn dark" data-act="approve" data-id="'+id+'">'+ic('check')+'Approve</button>')+'<button class="btn" data-act="reedit" data-id="'+id+'">Changes</button></div>'+(v.date?'':'<button class="btn wide" data-act="resched" data-id="'+id+'">'+ic('cal')+'Set the Instagram date</button>');
+  if(owner&&has&&CSC&&CSC.ig)h+=igPostBox(v);
   return h+'</aside>';
 }
 function noteCard(v){
@@ -1074,6 +1080,33 @@ function igPanel(){
     h+='<a class="trow igrow" href="'+esc((m&&safeUrl(m.url))||'#')+'" target="_blank" rel="noopener"><span class="igpost"><span class="igthumb">'+(m&&safeUrl(m.thumb)?'<img src="'+esc(m.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':ic('video',16))+'</span><span style="min-width:0"><b class="igcap">'+esc(m?((m.caption||'').split('\n')[0]||'No caption'):'Loading…')+'</b><span class="meta" style="display:block">'+kind+(e.ts?' · '+dayOf(e.ts*1000):'')+'</span></span></span>'+cell(e,'views')+cell(e,'reach')+cell(e,'likes')+cell(e,'comments')+cell(e,'shares')+cell(e,'saves')+'</a>'});
   h+='</div>'+(list.length>igShow?'<button class="btn wide" data-act="igmore">Show more ('+(list.length-igShow)+' left)</button>':'')+'<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Three dots mean the number is still loading. Numbers can be up to 48 hours behind Instagram.</p>';
   return box(h);
+}
+/* ---------- Posting to Instagram ---------- */
+const igPosts={};let igPostTimer=0;
+function loadPosts(ws,force){
+  if(!CSC||!CSC.ig||!ws)return;const c=igPosts[ws];
+  if(c&&!force&&(c.loading||Date.now()-c.at<30000))return;
+  igPosts[ws]=Object.assign({},c||{list:[]},{loading:true,at:Date.now()});
+  CSC.ig.posts(ws).then(r=>{igPosts[ws]={list:r.posts||[],at:Date.now()};renderAll();igPollPosts()},()=>{igPosts[ws]=Object.assign({},igPosts[ws],{loading:false})});
+}
+function igPollPosts(){
+  clearTimeout(igPostTimer);
+  const busy=[];Object.keys(igPosts).forEach(ws=>(igPosts[ws].list||[]).forEach(p=>{if(p.status==='processing'||(p.status==='queued'&&p.at<=Date.now()))busy.push([ws,p.id])}));
+  if(!busy.length)return;
+  igPostTimer=setTimeout(async()=>{for(const [ws,id] of busy){try{await CSC.ig.step(ws,id)}catch(e){}}Object.keys(igPosts).forEach(ws=>loadPosts(ws,true))},20000);
+}
+function igPostOf(v){const c=igPosts[v.ws];if(!c){loadPosts(v.ws);return null}return (c.list||[]).filter(p=>p.vid===v.id).sort((a,b)=>(b.postedAt||b.at||0)-(a.postedAt||a.at||0))[0]||null}
+function igWhen(ms){const d=new Date(ms);return dayOf(ms)+', '+niceTime(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'))}
+function igPostBox(v){
+  const p=igPostOf(v),id=esc(v.id);
+  if(!okAsset(v.editedAsset))return '<p class="meta">To post to Instagram from here, the editor has to upload the edit as a file, not a link.</p>';
+  if(p&&p.status==='published')return '<div class="igpostst ok">'+ic('insta',16)+'<span class="grow"><b>Posted to Instagram</b><span class="meta" style="display:block">'+esc(p.postedAt?igWhen(p.postedAt):'')+'</span></span>'+(safeUrl(p.url)?'<a class="btn sm" href="'+esc(p.url)+'" target="_blank" rel="noopener">View ↗</a>':'')+'</div>';
+  if(p&&p.status==='processing')return '<div class="igpostst">'+ic('insta',16)+'<span class="grow"><b>Posting to Instagram…</b><span class="meta" style="display:block">Instagram is processing the video. This can take a few minutes.</span></span></div>';
+  if(p&&p.status==='queued')return '<div class="igpostst">'+ic('cal',16)+'<span class="grow"><b>'+(p.at>Date.now()?'Will post to Instagram':'Posting to Instagram…')+'</b><span class="meta" style="display:block">'+esc(igWhen(p.at))+'</span></span><button class="btn sm" data-act="igcancel" data-id="'+id+'" data-arg="'+esc(p.id)+'">Cancel</button></div>';
+  let h='';
+  if(p&&p.status==='error')h+='<div class="igpostst bad">'+ic('insta',16)+'<span class="grow"><b>Not posted</b><span class="meta" style="display:block">'+esc(p.error)+'</span></span><button class="btn sm sq" data-act="igcancel" data-id="'+id+'" data-arg="'+esc(p.id)+'" aria-label="Dismiss">×</button></div>';
+  if(v.status==='published'&&!p)return h;
+  return h+'<button class="btn wide igbtn" data-act="igpost" data-id="'+id+'">'+ic('insta')+(p&&p.status==='error'?'Try posting again':'Post to Instagram')+'</button>';
 }
 /* ---------- Inspiration ---------- */
 function inspoEmbed(u){
@@ -1306,6 +1339,15 @@ function openDlg(kind,id,arg){
     h+='<div class="two"><label>Instagram date<input id="f-date" type="date" required value="'+esc(d)+'"></label><label>Time<input id="f-time" type="time" required value="'+esc(t)+'"></label></div>'+
       (kind==='deliver'?'<label>Note for the owner (optional)<input id="f-note" maxlength="200" placeholder="e.g. Used the second take, 42 seconds"></label>':'')+
       acts(kind==='deliver'?'Upload and schedule':'Save');
+  }else if(kind==='igpost'&&v){
+    const dt=v.date?parseYmd(v.date):null;if(dt&&v.time){const t=v.time.split(':');dt.setHours(+t[0],+t[1],0,0)}else if(dt)dt.setHours(18,0,0,0);
+    const future=dt&&dt.getTime()>Date.now()+120000;
+    h='<h2>Post to Instagram</h2><p class="meta">'+esc(v.title)+'. It is posted as a Reel on the Instagram account connected to this workspace.</p>'+
+      '<label>Caption<textarea id="f-caption" rows="6" maxlength="2200" placeholder="Write the caption, hashtags and mentions">'+esc(v.caption||'')+'</textarea></label>'+
+      '<label class="chk"><input id="f-feed" type="checkbox" checked> Also show it in the main feed, not only in Reels</label>'+
+      (future?'<div class="two"><button type="submit" class="btn" data-arg="sched">'+ic('cal')+'Schedule for '+esc(niceDate(v.date)+(v.time?', '+niceTime(v.time):', 6:00 PM'))+'</button><button type="submit" class="btn dark" data-arg="now">'+ic('insta')+'Post now</button></div>':'<button type="submit" class="btn dark wide" data-arg="now">'+ic('insta')+'Post now</button>')+
+      '<p class="meta">Reels up to 300 MB, between 3 seconds and 15 minutes. Scheduled posts go out at that time even if nobody has the site open.</p><p class="err" id="f-err" hidden></p><div class="dlgacts"><button type="button" class="btn" data-act="close">Cancel</button></div>';
+    dlgArg=future?dt.getTime():0;
   }else if(kind==='reedit'&&v){
     h='<h2>Request changes</h2><p class="meta">'+esc(v.title)+' goes back to the editor and comes off the calendar until a new version is uploaded.</p>'+
       '<label>What should change?<textarea id="f-change" rows="4" maxlength="500" required placeholder="e.g. Shorten the intro, make the captions bigger"></textarea></label>'+acts('Send to editor');
@@ -1329,6 +1371,12 @@ $('#dlgForm').addEventListener('submit',async ev=>{
     const name=val('f-name');if(!name)return formErr('Enter a name for the client.');
     const id=newId('w');await putWs(id,{name,createdAt:Date.now()});
     curWs=id;LS.set('csc.ws',id);closeDlg();renderAll();
+  }else if(dlgKind==='igpost'){
+    const v=videos.find(x=>x.id===dlgId);if(!v)return closeDlg();
+    const sub=ev&&ev.submitter,sched=sub&&sub.dataset.arg==='sched',cap=($('#f-caption')||{}).value||'';
+    busy(sched?'Scheduling…':'Sending the video to Instagram…');
+    try{await patchVideo(v.id,{caption:cap.slice(0,2200)});const r=await CSC.ig.publish({ws:v.ws,vid:v.id,caption:cap,feed:$('#f-feed').checked,at:sched?dlgArg:0});closeDlg();notice(sched?'Scheduled. It will post to Instagram at that time.':'Sent to Instagram. It appears on the account once Instagram finishes processing, usually within a few minutes.');loadPosts(v.ws,true)}
+    catch(x){formErr(x.message||'Instagram did not accept the post.')}
   }else if(dlgKind==='renws'){
     const name=val('f-name'),w=wsOf(dlgId);if(!name)return formErr('Enter a name for the client.');
     closeDlg();if(w){const d=Object.assign({},w,{name});delete d.id;await putWs(w.id,d)}
@@ -1418,6 +1466,8 @@ document.addEventListener('click',async ev=>{
   else if(act==='playpv'){stopPreviews();const box=b.closest('.pv,.preview'),d=document.createElement('div');b.hidden=true;box.insertBefore(d,box.firstChild);mountPlayer(d,b.dataset.asset,true)}
   else if(act==='igon'){b.disabled=true;try{const r=await CSC.ig.start(igWs());location.href=r.url}catch(x){b.disabled=false;const e=$('#igErr');if(e){e.textContent=x.message||'Instagram could not be opened.';e.hidden=false}}}
   else if(act==='igsync')syncIg();
+  else if(act==='igpost')openDlg('igpost',id);
+  else if(act==='igcancel'){const v=videos.find(x=>x.id===id);if(v){b.disabled=true;try{await CSC.ig.cancel(v.ws,b.dataset.arg)}catch(x){fail(x)}loadPosts(v.ws,true)}}
   else if(act==='igmore'){igShow+=30;renderAll()}
   else if(act==='igoff'){if(armedDelete!=='igoff'){armedDelete='igoff';renderAll();return}armedDelete=null;try{await CSC.ig.disconnect(ig.ws)}catch(x){fail(x)}loadIg(true);renderAll()}
   else if(act==='addinspo'){
