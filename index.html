@@ -1105,7 +1105,7 @@ function igPostBox(v){
   if(p&&p.status==='queued')return '<div class="igpostst">'+ic('cal',16)+'<span class="grow"><b>'+(p.at>Date.now()?'Will post to Instagram':'Posting to Instagram…')+'</b><span class="meta" style="display:block">'+esc(igWhen(p.at))+'</span></span><button class="btn sm" data-act="igcancel" data-id="'+id+'" data-arg="'+esc(p.id)+'">Cancel</button></div>';
   let h='';
   if(p&&p.status==='error')h+='<div class="igpostst bad">'+ic('insta',16)+'<span class="grow"><b>Not posted</b><span class="meta" style="display:block">'+esc(p.error)+'</span></span><button class="btn sm sq" data-act="igcancel" data-id="'+id+'" data-arg="'+esc(p.id)+'" aria-label="Dismiss">×</button></div>';
-  if(v.status==='published'&&!p)return h;
+  if(v.status==='published'&&!p)h+='<p class="meta">This video is marked as published. If it isn’t on Instagram yet, you can post it from here.</p>';
   return h+'<button class="btn wide igbtn" data-act="igpost" data-id="'+id+'">'+ic('insta')+(p&&p.status==='error'?'Try posting again':'Post to Instagram')+'</button>';
 }
 /* ---------- Inspiration ---------- */
