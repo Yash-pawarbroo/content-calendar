@@ -1410,10 +1410,11 @@ function vSettings(){
     (usage&&usage.maxBytes?'<span class="ctitle">Storage</span><p class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used · '+usage.files+' files · '+LIM+' per file</p>':'')+'</section></div>';
 }
 function applyOpen(){
-  const o=window.CSC&&CSC.open;if(!o||!wsLoaded||!vidLoaded)return;CSC.open=null;
+  const o=window.CSC&&CSC.open;if(!o||!wsLoaded||!vidLoaded)return;CSC.open=null;igRange='all';
   let k='';try{k=decodeURIComponent(o.w)}catch(e){k=o.w}k=k.toLowerCase().replace(/[-_+]+/g,' ').trim();
   const c=workspaces.filter(w=>w.id===o.w||(w.name||'').toLowerCase().trim()===k).sort((a,b)=>videos.filter(v=>v.ws===b.id).length-videos.filter(v=>v.ws===a.id).length);
   if(c[0]){curWs=c[0].id;LS.set('csc.ws',curWs)}
+  if(c.length>1&&CSC.ig&&CSC.ig.status)Promise.all(c.map(w=>CSC.ig.status(w.id).then(s=>!!(s&&s.connected),()=>false))).then(r=>{const i=r.indexOf(true);if(i>0&&curWs===c[0].id){curWs=c[i].id;LS.set('csc.ws',curWs);renderAll()}});
 }
 function renderAll(){applyOpen();
   if(CSC&&CSC.me&&CSC.me.role!=='pending'&&!isAdmin()&&['team','admin'].includes(view))view='videos';
