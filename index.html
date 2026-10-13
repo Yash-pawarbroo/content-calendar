@@ -497,6 +497,9 @@ a.trow.igrow:hover{background:var(--soft)}
 .inform .field{width:100%;max-width:none}
 .inspogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:start}
 .inspocard{gap:10px;padding:12px}
+.inspoadd{border-style:dashed;background:transparent;display:flex;flex-direction:column;gap:8px;min-height:300px;justify-content:center}
+.inspoadd .field{width:100%}
+.inspoaddtop{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;margin-bottom:6px}
 .inspoframe{width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:var(--soft2);display:block}
 .inspoframe.ig{aspect-ratio:auto;height:520px}
 .inspoframe.tall{aspect-ratio:9/16}
@@ -1259,13 +1262,20 @@ function vInspo(){
   if(one)h+=inspoTags(one);
   const tagged=one&&igTag?list.filter(x=>x.tag===igTag):list;
   if(one&&igTag)h+='<div class="row" style="margin-bottom:10px"><b>Saved for #'+esc(igTag)+'</b><span class="meta">'+tagged.length+'</span><button class="btn sm" data-act="igtagf" data-arg="">Show everything</button></div>';
-  if(!tagged.length)return h+emptyBox('heart',igTag?'Nothing saved for #'+igTag+' yet':'Nothing saved yet',igTag?'Open #'+igTag+' on Instagram, copy a reel’s link and paste it above.':'Paste a link above to start your inspiration board.');
+  const addTile=one&&canWrite;
+  if(!tagged.length&&!addTile)return h+emptyBox('heart',igTag?'Nothing saved for #'+igTag+' yet':'Nothing saved yet',igTag?'Open #'+igTag+' on Instagram, copy a reel’s link and paste it above.':'Paste a link above to start your inspiration board.');
   h+='<div class="inspogrid">';
   tagged.forEach(x=>{const w=wsOf(x.ws),u=safeUrl(x.url),em=u?inspoEmbed(u):'';
     h+='<section class="card inspocard">'+(em||'<a class="inspolink" href="'+esc(u||'#')+'" target="_blank" rel="noopener">'+ic('link',20)+'<b>'+esc(u?hostOf(u):'Link')+'</b><span class="meta">Open link ↗</span></a>')+
       (x.tag||x.note?'<p class="inspnote">'+(x.tag?'<b>#'+esc(x.tag)+'</b> ':'')+esc(x.note||'')+'</p>':'')+
       '<div class="row" style="justify-content:space-between"><span class="meta">'+esc(x.by||'Someone')+(x.at?' · '+dayOf(x.at):'')+(curWs==='all'&&w?' · '+esc(w.name):'')+'</span><span class="row" style="flex-wrap:nowrap">'+(u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open ↗</a>':'')+
       (canWrite?(armedDelete==='in:'+x.id?'<button class="btn sm danger" data-act="delinspo" data-id="'+esc(x.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="delinspo" data-id="'+esc(x.id)+'" aria-label="Remove">'+ic('trash',14)+'</button>'):'')+'</span></div></section>'});
+  if(addTile){const tags=(wsOf(one)||{}).tags||[];
+    h+='<section class="card inspocard inspoadd"><div class="inspoaddtop">'+ic('plus',22)+'<b>Save a reel here</b><span class="meta">Copy a reel’s link on Instagram (Share → Copy link), then paste it below. You can also press Ctrl+V anywhere on this page.</span></div>'+
+      '<input class="field" id="inUrl2" data-key="inu2" type="url" placeholder="Paste the link" aria-label="Link">'+
+      (tags.length?'<select class="field" id="inTag2" aria-label="Hashtag"><option value="">No hashtag</option>'+tags.map(t=>'<option value="'+esc(t)+'"'+(igTag===t?' selected':'')+'>#'+esc(t)+'</option>').join('')+'</select>':'')+
+      '<input class="field" id="inNote2" data-key="inn2" maxlength="200" placeholder="What do you like about it? (optional)" aria-label="Note">'+
+      '<button class="btn dark wide" data-act="addinspo2">'+ic('plus')+'Save</button><p class="err" id="inErr2" hidden></p></section>'}
   return h+'</div>';
 }
 function vAnalytics(){
@@ -1634,6 +1644,14 @@ document.addEventListener('click',async ev=>{
     $('#inUrl').value='';$('#inNote').value='';
     if(db){try{await db.doc('inspo/'+nid).set(row)}catch(x){fail(x)}}else{inspo.push(Object.assign({id:nid},row));renderAll()}
   }
+  else if(act==='addinspo2'){
+    const e=$('#inErr2'),u=val('inUrl2').trim(),ws=igWs(),tg=$('#inTag2')?$('#inTag2').value:'';
+    if(!safeUrl(u)){e.textContent='Paste a full link that starts with https://';e.hidden=false;return}
+    if(!ws){e.textContent='Choose a workspace first.';e.hidden=false;return}
+    const nid=newId('i'),row={ws,url:u.slice(0,500),note:val('inNote2').slice(0,200),by:who(),at:Date.now()};if(tg)row.tag=tg;
+    b.disabled=true;$('#inUrl2').value='';$('#inNote2').value='';
+    if(db){try{await db.doc('inspo/'+nid).set(row)}catch(x){fail(x)}}else{inspo.push(Object.assign({id:nid},row));renderAll()}
+  }
   else if(act==='delinspo'){
     if(armedDelete!=='in:'+id){armedDelete='in:'+id;renderAll();return}
     armedDelete=null;if(db){try{await db.doc('inspo/'+id).delete()}catch(x){fail(x)}}else{inspo=inspo.filter(x=>x.id!==id);renderAll()}
@@ -1781,6 +1799,8 @@ document.addEventListener('loadedmetadata',e=>{const t=e.target,p=t.closest&&t.c
 document.addEventListener('error',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest('.pv');if(p)p.classList.add('bad')},true);
 document.addEventListener('timeupdate',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest&&t.closest('.pv,.fullpv');if(!p||t.paused||t.currentTime<0.6||p.classList.contains('nopic'))return;let n=1;try{n=t.getVideoPlaybackQuality?t.getVideoPlaybackQuality().totalVideoFrames:(t.webkitDecodedFrameCount==null?1:t.webkitDecodedFrameCount)}catch(x){}if(n===0)p.classList.add('nopic')},true);
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('pplWs')&&CSC)CSC.userUpdate({id:t.dataset.id,ws:t.value}).then(loadPeople,pplErr)});
+document.addEventListener('paste',e=>{if(view!=='inspo')return;const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;const i=$('#inUrl2');if(!i)return;const s=((e.clipboardData&&e.clipboardData.getData('text'))||'').trim();if(!/^https?:\/\//i.test(s))return;e.preventDefault();i.value=s;i.scrollIntoView({block:'center',behavior:'smooth'});const n=$('#inNote2');if(n)n.focus()});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^in(Url2|Note2)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="addinspo2"]');if(b)b.click();return}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='igTagIn'){e.preventDefault();const b=document.querySelector('[data-act="igtagadd"]:not([data-arg])');if(b)b.click();return}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^in(Url|Note)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="addinspo"]');if(b)b.click();return}if(e.key==='Enter'&&/^auth(Name|Brand|Email|Pw)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="authgo"]');if(b)b.click();return}if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
