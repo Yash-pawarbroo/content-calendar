@@ -2,10 +2,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script>window.CSC_API="https://aged-water-b6f3content-scheduling-uploader.yogeshbhade555.workers.dev";</script><script>// Runs the calendar on Cloudflare: same app, with data and files kept in the R2 bucket.
 (function(){
   var BASE=String(window.CSC_API||'').replace(/\/+$/,'');
-  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
-  var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
+  window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}try{sessionStorage.removeItem('csc.full')}catch(e){}location.href='/'}};
+  var KEY='';try{KEY=localStorage.getItem('csc.pass')||'';if(KEY.indexOf('a_')===0){localStorage.removeItem('csc.pass');KEY=''}}catch(e){}
+  // A full-access link only signs in the tab it was opened in, so the plain website never opens as admin by itself.
+  try{var FK=sessionStorage.getItem('csc.full')||'';if(FK)KEY=FK}catch(e){}
   // A client's private link ends in #c=<their key>: remember it and tidy the address.
-  try{var hm=/^#c=((?:l|a)_[0-9a-z_]{20,90})(?:\/([a-z]+))?(?:\/([^/]+))?\/?$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}if(hm[3])window.CSC.open={w:hm[3]};history.replaceState(null,'',location.pathname+location.search+(hm[2]?'#'+hm[2]:''))}}catch(e){}
+  try{var hm=/^#c=((?:l|a)_[0-9a-z_]{20,90})(?:\/([a-z]+))?(?:\/([^/]+))?\/?$/.exec(location.hash);if(hm){KEY=hm[1];try{if(KEY.indexOf('a_')===0)sessionStorage.setItem('csc.full',KEY);else{localStorage.setItem('csc.pass',KEY);sessionStorage.removeItem('csc.full')}}catch(e){}if(hm[3])window.CSC.open={w:hm[3]};history.replaceState(null,'',location.pathname+location.search+(hm[2]?'#'+hm[2]:''))}}catch(e){}
   try{var jm=/^#join=([je]_[0-9a-z_]{10,60})$/.exec(location.hash);if(jm)window.CSC.join=jm[1]}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign(KEY?{'x-upload-key':KEY}:{},opt.headers||{});
@@ -13,14 +15,14 @@
   // No blocking screen: the app opens signed out, and people sign in from the page itself.
   var ready=new Promise(function(res){
     api('/api/check').then(function(me){window.CSC.me=me;res()},function(e){
-      if(e.status===401&&KEY){KEY='';try{localStorage.removeItem('csc.pass')}catch(x){}api('/api/check').then(function(me){window.CSC.me=me;res()},function(){res()})}else res()});
+      if(e.status===401&&KEY){KEY='';try{localStorage.removeItem('csc.pass')}catch(x){}try{sessionStorage.removeItem('csc.full')}catch(x){}api('/api/check').then(function(me){window.CSC.me=me;res()},function(){res()})}else res()});
   });
   function trySign(code,adminOnly){return fetch(BASE+'/api/check',{headers:{'x-upload-key':code}}).then(function(r){return r.ok?r.json():null}).then(function(me){
-    if(me&&(!adminOnly||me.role==='owner')){try{localStorage.setItem('csc.pass',code)}catch(e){}location.reload();return true}return false}).catch(function(){return false})}
+    if(me&&(!adminOnly||me.role==='owner')){try{localStorage.setItem('csc.pass',code);sessionStorage.removeItem('csc.full')}catch(e){}location.reload();return true}return false}).catch(function(){return false})}
   window.CSC.signIn=function(code){return trySign(code,false)};
   window.CSC.adminSignIn=function(code){return trySign(code,true)};
   function post(path,body){return fetch(BASE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'Something went wrong.');return j})},function(){throw new Error('Could not reach the server. Check your connection and try again.')})}
-  function keep(j){try{localStorage.setItem('csc.pass',j.token)}catch(e){}location.reload();return j}
+  function keep(j){try{localStorage.setItem('csc.pass',j.token);sessionStorage.removeItem('csc.full')}catch(e){}location.reload();return j}
   window.CSC.login=function(email,password){return post('/api/login',{email:email,password:password}).then(keep)};
   window.CSC.signup=function(o){return post('/api/signup',o).then(keep)};
   window.CSC.links=function(){return api('/api/links').then(function(j){return j.links})};
