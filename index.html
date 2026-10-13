@@ -472,6 +472,9 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .igcard{margin-bottom:6px}
 .igacct .avatar{width:40px;height:40px}
 .igkpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.trow.igtrow{grid-template-columns:minmax(0,1fr) 70px 100px 100px minmax(0,1.6fr) 150px !important;cursor:default;align-items:center}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
+.linkbtn:hover b{text-decoration:underline}
 .igbest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
 .igbc{display:flex;flex-direction:column;gap:4px;min-width:0;color:inherit;text-decoration:none;border:1px solid var(--line);border-radius:10px;padding:8px}
 .igbc:hover{border-color:var(--ink,#222)}
@@ -481,7 +484,7 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .igbc .igcap{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.85rem}
 .igbn{display:flex;flex-direction:column;gap:1px;font-size:.78rem;color:var(--muted,#666)}
 .igbn b{color:var(--ink,#222)}
-@media(max-width:860px){.igbest{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:860px){.igbest{grid-template-columns:repeat(2,minmax(0,1fr))}.trow.igtrow{grid-template-columns:minmax(0,1fr) auto auto !important}.trow.igtrow>span:nth-child(4),.trow.igtrow>span:nth-child(5){display:none}}
 .trow.igrow{grid-template-columns:minmax(0,2.6fr) repeat(6,minmax(54px,.6fr));text-decoration:none;color:inherit;cursor:pointer}
 a.trow.igrow:hover{background:var(--soft)}
 .igpost{display:flex;align-items:center;gap:10px;min-width:0}
@@ -615,7 +618,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
+let igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -1134,7 +1137,7 @@ function igPanel(){
   const idx=ig.idx||{},allIds=Object.keys(idx),pend=igPending(),tk={REELS:'R',FEED:'F'}[igType];
   const since=igRange==='all'?0:Date.now()/1000-(+igRange)*86400,ids=since?allIds.filter(id=>(idx[id].ts||0)>=since):allIds;
   const rangeTxt={'7':'last 7 days','30':'last 30 days','90':'last 90 days','365':'last 12 months','all':'all time'}[igRange];
-  let list=tk?ids.filter(id=>idx[id].k===tk):ids.slice();
+  let list=tk?ids.filter(id=>idx[id].k===tk):ids.slice();if(igTag)list=list.filter(id=>(idx[id].h||[]).includes(igTag));
   const key={views:'views',likes:'likes',comments:'comments',shares:'shares'}[igSort];
   list.sort(key?((a,b)=>(igN(idx[b],key)||0)-(igN(idx[a],key)||0)):((a,b)=>(idx[b].ts||0)-(idx[a].ts||0)));
   const sum=k=>ids.reduce((n,id)=>n+(igN(idx[id],k)||0),0),kp=(icon,k,label)=>'<div class="kpi">'+ic(icon,16)+'<span class="kv num">'+fmtK(sum(k))+'</span><span class="meta">'+label+'</span></div>';
@@ -1154,8 +1157,9 @@ function igPanel(){
     best.forEach((id,i)=>{const e=idx[id],m=ig.items[id];if(!m)igPage(e.p||0);
       h+='<a class="igbc" href="'+esc((m&&safeUrl(m.url))||'#')+'" target="_blank" rel="noopener"><span class="igbt">'+(m&&safeUrl(m.thumb)?'<img src="'+esc(m.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':ic('video',18))+'<span class="igrank">#'+(i+1)+'</span></span><b class="igcap">'+esc(m?((m.caption||'').split('\n')[0]||'No caption'):'Loading…')+'</b><span class="meta">'+(e.ts?dayOf(e.ts*1000):'')+'</span><span class="igbn"><span><b class="num">'+fmtK(igN(e,'views')||0)+'</b> views</span><span><b class="num">'+fmtK(igN(e,'likes')||0)+'</b> likes</span><span><b class="num">'+fmtK(igN(e,'shares')||0)+'</b> shares</span></span></a>'});
     h+='</div>'}
+  h+=igTagsBox(ws,ids,idx,rangeTxt,st);
   h+=
-    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content</span><span class="row"><select class="field" id="igType" aria-label="Type">'+[['all','All'],['REELS','Reels'],['FEED','Posts']].map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
+    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content'+(igTag?' · #'+esc(igTag)+' <button class="btn sm" data-act="igtagf" data-arg="">Clear</button>':'')+'</span><span class="row"><select class="field" id="igType" aria-label="Type">'+[['all','All'],['REELS','Reels'],['FEED','Posts']].map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
     '<div class="table"><div class="trow th igrow"><span>POST</span><span>VIEWS</span><span>REACH</span><span>LIKES</span><span>COMMENTS</span><span>SHARES</span><span>SAVES</span></div>';
   const cell=(e,k)=>{const n=igN(e,k);return '<span class="num" data-l="'+k+'">'+(n==null?(e.a||k==='likes'||k==='comments'?'—':'…'):fmtK(n))+'</span>'};
   list.slice(0,igShow).forEach(id=>{const e=idx[id],m=ig.items[id];if(!m)igPage(e.p||0);
@@ -1166,6 +1170,25 @@ function igPanel(){
   h+='<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Three dots mean the number is still loading. Numbers can be up to 48 hours behind Instagram.</p>';
   return box(h);
 }
+function igTagsBox(ws,ids,idx,rangeTxt,st){
+  const w=wsOf(ws),tags=(w&&w.tags)||[],edit=!!(CSC&&CSC.me&&CSC.me.role!=='pending'&&(st.manage||isAdmin()||canWrite));
+  const stat=t=>{const ps=ids.filter(id=>(idx[id].h||[]).includes(t)),rs=ps.filter(id=>idx[id].k==='R'),v=rs.reduce((n,id)=>n+(igN(idx[id],'views')||0),0);
+    const best=rs.slice().sort((a,b)=>(igN(idx[b],'views')||0)-(igN(idx[a],'views')||0))[0];return {n:ps.length,r:rs.length,v,avg:rs.length?Math.round(v/rs.length):0,best}};
+  const igUrl=t=>'https://www.instagram.com/explore/tags/'+encodeURIComponent(t)+'/';
+  let h='<div class="chead" style="margin-top:8px"><span class="ctitle" style="font-size:.95rem">Hashtags · '+esc(rangeTxt)+'</span><span class="meta">your posts that use each hashtag</span></div>';
+  if(edit)h+='<div class="row" style="flex-wrap:nowrap"><input class="field grow" id="igTagIn" maxlength="61" placeholder="Add a hashtag to track, e.g. #capgown" aria-label="Hashtag"><button class="btn" data-act="igtagadd">Add</button></div><p class="err" id="igTagErr" hidden></p>';
+  if(!tags.length)h+='<p class="meta">No hashtags tracked yet.'+(edit?' Add the ones you use, like #capgown or #graduationgown.':'')+'</p>';
+  else{h+='<div class="table"><div class="trow th igtrow"><span>HASHTAG</span><span>POSTS</span><span>REEL VIEWS</span><span>AVG / REEL</span><span>BEST REEL</span><span></span></div>';
+    tags.forEach(t=>{const s=stat(t),b=s.best&&idx[s.best],m=s.best&&ig.items[s.best];if(s.best&&!m)igPage(b.p||0);
+      h+='<div class="trow igtrow"><span><button class="linkbtn" data-act="igtagf" data-arg="'+esc(t)+'" title="Show these posts below"><b>#'+esc(t)+'</b></button></span><span class="num" data-l="posts">'+s.n+'</span><span class="num" data-l="views">'+fmtK(s.v)+'</span><span class="num" data-l="avg">'+(s.r?fmtK(s.avg):'—')+'</span><span style="min-width:0">'+(b?'<a class="igcap" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit;text-decoration:none" href="'+esc((m&&safeUrl(m.url))||'#')+'" target="_blank" rel="noopener">'+esc(m?((m.caption||'').split('\n')[0]||'Reel'):'Loading…')+' · '+fmtK(igN(b,'views')||0)+'</a>':'<span class="meta">—</span>')+'</span><span class="row" style="flex-wrap:nowrap;justify-content:flex-end"><a class="btn sm" href="'+igUrl(t)+'" target="_blank" rel="noopener" title="See everyone’s posts with this hashtag on Instagram">Instagram ↗</a>'+(edit?'<button class="btn sm sq" data-act="igtagrm" data-arg="'+esc(t)+'" aria-label="Stop tracking #'+esc(t)+'">'+ic('trash',14)+'</button>':'')+'</span></div>'});
+    h+='</div>'}
+  const cnt={};ids.forEach(id=>(idx[id].h||[]).forEach(t=>{if(!tags.includes(t)){const c=cnt[t]||(cnt[t]={n:0,v:0,r:0});c.n++;if(idx[id].k==='R'){c.r++;c.v+=igN(idx[id],'views')||0}}}));
+  const sug=Object.keys(cnt).filter(t=>cnt[t].n>=2).sort((a,b)=>(cnt[b].r?cnt[b].v/cnt[b].r:0)-(cnt[a].r?cnt[a].v/cnt[a].r:0)).slice(0,8);
+  if(sug.length)h+='<p class="meta" style="margin-bottom:0">Other hashtags in your posts, best first:</p><div class="row" style="flex-wrap:wrap;gap:6px">'+sug.map(t=>'<button class="btn sm" data-act="'+(edit?'igtagadd':'igtagf')+'" data-arg="'+esc(t)+'">#'+esc(t)+' <span class="meta">'+cnt[t].n+'</span></button>').join('')+'</div>';
+  h+='<p class="meta">Numbers come from this account’s own posts. Instagram ↗ opens the hashtag page where you can see what other brands post with it.</p>';
+  return h;
+}
+async function igTagSave(ws,tags){const w=wsOf(ws);if(!w)return;const d=Object.assign({},w,{tags});delete d.id;await putWs(ws,d)}
 /* ---------- Posting to Instagram ---------- */
 const igPosts={};let igPostTimer=0;
 function loadPosts(ws,force){
@@ -1587,6 +1610,11 @@ document.addEventListener('click',async ev=>{
   else if(act==='igsync')syncIg();
   else if(act==='igreq'){const u=val('igUser'),e=$('#igErr');if(!u){if(e){e.textContent='Enter your Instagram username.';e.hidden=false}return}b.disabled=true;try{await CSC.ig.request(igWs(),u);notice('Request sent. The admin will add your Instagram account.');loadIg(true);renderAll()}catch(x){b.disabled=false;if(e){e.textContent=x.message||'That did not work.';e.hidden=false}}}
   else if(act==='igrequndo'){try{await CSC.ig.requestDone(igWs(),true)}catch(x){}loadIg(true);renderAll()}
+  else if(act==='igtagf'){igTag=b.dataset.arg||'';igShow=30;renderAll()}
+  else if(act==='igtagadd'){const ws=igWs(),w=wsOf(ws);if(!w)return;const inp=$('#igTagIn'),raw=(b.dataset.arg||(inp&&inp.value)||'').trim().replace(/^#/,'').toLowerCase();
+    if(!/^[\p{L}\p{M}\p{N}_]{1,60}$/u.test(raw)){const e=$('#igTagErr');if(e){e.textContent='Type one hashtag, like #capgown (letters, numbers and _ only).';e.hidden=false}return}
+    const tags=(w.tags||[]).filter(t=>t!==raw).concat([raw]).slice(-30);b.disabled=true;await igTagSave(ws,tags);if(inp)inp.value=''}
+  else if(act==='igtagrm'){const ws=igWs(),w=wsOf(ws);if(!w)return;if(igTag===b.dataset.arg)igTag='';await igTagSave(ws,(w.tags||[]).filter(t=>t!==b.dataset.arg))}
   else if(act==='igreqdonex'){b.disabled=true;try{await CSC.ig.requestDoneX(id,false);notice('Marked as added. They now see how to accept the invite and connect.')}catch(x){fail(x)}if(igOther[id])igOther[id].status='added';loadPeople();renderAll()}
   else if(act==='igreqdone'){b.disabled=true;try{await CSC.ig.requestDone(id||igWs(),false);notice('Marked as added. The client now sees how to accept the invite and connect.')}catch(x){fail(x)}if(igReqs[id])igReqs[id].status='added';loadIg(true);loadPeople();renderAll()}
   else if(act==='igcopyu'){try{await navigator.clipboard.writeText(b.dataset.arg);notice('Copied @'+b.dataset.arg)}catch(x){prompt('Instagram username',b.dataset.arg)}}
@@ -1750,6 +1778,7 @@ document.addEventListener('loadedmetadata',e=>{const t=e.target,p=t.closest&&t.c
 document.addEventListener('error',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest('.pv');if(p)p.classList.add('bad')},true);
 document.addEventListener('timeupdate',e=>{const t=e.target,p=t&&t.tagName==='VIDEO'&&t.closest&&t.closest('.pv,.fullpv');if(!p||t.paused||t.currentTime<0.6||p.classList.contains('nopic'))return;let n=1;try{n=t.getVideoPlaybackQuality?t.getVideoPlaybackQuality().totalVideoFrames:(t.webkitDecodedFrameCount==null?1:t.webkitDecodedFrameCount)}catch(x){}if(n===0)p.classList.add('nopic')},true);
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('pplWs')&&CSC)CSC.userUpdate({id:t.dataset.id,ws:t.value}).then(loadPeople,pplErr)});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='igTagIn'){e.preventDefault();const b=document.querySelector('[data-act="igtagadd"]:not([data-arg])');if(b)b.click();return}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&/^in(Url|Note)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="addinspo"]');if(b)b.click();return}if(e.key==='Enter'&&/^auth(Name|Brand|Email|Pw)$/.test(e.target.id||'')){e.preventDefault();const b=document.querySelector('[data-act="authgo"]');if(b)b.click();return}if(e.key==='Enter'&&(e.target.id==='adminPw'||e.target.id==='accPw')){e.preventDefault();const b=document.querySelector(e.target.id==='adminPw'?'[data-act="adminin"]':'[data-act="accin"]');if(b)b.click();return}const t=e.target;if(e.key==='Enter'&&!e.shiftKey&&t.classList&&t.classList.contains('noteIn')){e.preventDefault();const b=t.closest('.notesbox').querySelector('[data-act="note"]');if(b)b.click()}});
 function stageEdit(id,f){try{checkFile(f,'edited')}catch(e){return notice(e.msg)}notice('');pendingEdit[id]=f;lastHtml='';renderAll()}
 $('#rowPick').addEventListener('change',async e=>{const c=pickCtx,list=Array.from(e.target.files||[]);pickCtx=null;if(!c||!list.length)return;if(c.kind==='edited')stageEdit(c.id,list[0]);else await uploadFiles(c.id,c.kind,c.ver,list)});
