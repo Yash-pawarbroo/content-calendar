@@ -472,7 +472,8 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .igcard{margin-bottom:6px}
 .igacct .avatar{width:40px;height:40px}
 .igkpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
-.trow.igtrow{grid-template-columns:minmax(0,1fr) 70px 100px 100px minmax(0,1.6fr) 150px !important;cursor:default;align-items:center}
+.trow.igtrow{grid-template-columns:minmax(0,1.2fr) 100px 150px 130px 220px !important;cursor:default;align-items:center}
+.trow.igtrow.on{background:#fbf6ec}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
 .linkbtn:hover b{text-decoration:underline}
 .igbest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
@@ -484,7 +485,7 @@ dialog.wide{width:min(980px,calc(100vw - 32px))}
 .igbc .igcap{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.85rem}
 .igbn{display:flex;flex-direction:column;gap:1px;font-size:.78rem;color:var(--muted,#666)}
 .igbn b{color:var(--ink,#222)}
-@media(max-width:860px){.igbest{grid-template-columns:repeat(2,minmax(0,1fr))}.trow.igtrow{grid-template-columns:minmax(0,1fr) auto auto !important}.trow.igtrow>span:nth-child(4),.trow.igtrow>span:nth-child(5){display:none}}
+@media(max-width:860px){.igbest{grid-template-columns:repeat(2,minmax(0,1fr))}.trow.igtrow{grid-template-columns:minmax(0,1fr) auto auto !important}.trow.igtrow>span:nth-child(3),.trow.igtrow>span:nth-child(4){display:none}}
 .trow.igrow{grid-template-columns:minmax(0,2.6fr) repeat(6,minmax(54px,.6fr));text-decoration:none;color:inherit;cursor:pointer}
 a.trow.igrow:hover{background:var(--soft)}
 .igpost{display:flex;align-items:center;gap:10px;min-width:0}
@@ -1137,7 +1138,7 @@ function igPanel(){
   const idx=ig.idx||{},allIds=Object.keys(idx),pend=igPending(),tk={REELS:'R',FEED:'F'}[igType];
   const since=igRange==='all'?0:Date.now()/1000-(+igRange)*86400,ids=since?allIds.filter(id=>(idx[id].ts||0)>=since):allIds;
   const rangeTxt={'7':'last 7 days','30':'last 30 days','90':'last 90 days','365':'last 12 months','all':'all time'}[igRange];
-  let list=tk?ids.filter(id=>idx[id].k===tk):ids.slice();if(igTag)list=list.filter(id=>(idx[id].h||[]).includes(igTag));
+  let list=tk?ids.filter(id=>idx[id].k===tk):ids.slice();
   const key={views:'views',likes:'likes',comments:'comments',shares:'shares'}[igSort];
   list.sort(key?((a,b)=>(igN(idx[b],key)||0)-(igN(idx[a],key)||0)):((a,b)=>(idx[b].ts||0)-(idx[a].ts||0)));
   const sum=k=>ids.reduce((n,id)=>n+(igN(idx[id],k)||0),0),kp=(icon,k,label)=>'<div class="kpi">'+ic(icon,16)+'<span class="kv num">'+fmtK(sum(k))+'</span><span class="meta">'+label+'</span></div>';
@@ -1157,9 +1158,8 @@ function igPanel(){
     best.forEach((id,i)=>{const e=idx[id],m=ig.items[id];if(!m)igPage(e.p||0);
       h+='<a class="igbc" href="'+esc((m&&safeUrl(m.url))||'#')+'" target="_blank" rel="noopener"><span class="igbt">'+(m&&safeUrl(m.thumb)?'<img src="'+esc(m.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':ic('video',18))+'<span class="igrank">#'+(i+1)+'</span></span><b class="igcap">'+esc(m?((m.caption||'').split('\n')[0]||'No caption'):'Loading…')+'</b><span class="meta">'+(e.ts?dayOf(e.ts*1000):'')+'</span><span class="igbn"><span><b class="num">'+fmtK(igN(e,'views')||0)+'</b> views</span><span><b class="num">'+fmtK(igN(e,'likes')||0)+'</b> likes</span><span><b class="num">'+fmtK(igN(e,'shares')||0)+'</b> shares</span></span></a>'});
     h+='</div>'}
-  h+=igTagsBox(ws,ids,idx,rangeTxt,st);
   h+=
-    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content'+(igTag?' · #'+esc(igTag)+' <button class="btn sm" data-act="igtagf" data-arg="">Clear</button>':'')+'</span><span class="row"><select class="field" id="igType" aria-label="Type">'+[['all','All'],['REELS','Reels'],['FEED','Posts']].map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
+    '<div class="chead" style="margin-top:4px"><span class="ctitle" style="font-size:.95rem">All content</span><span class="row"><select class="field" id="igType" aria-label="Type">'+[['all','All'],['REELS','Reels'],['FEED','Posts']].map(([k,l])=>'<option value="'+k+'"'+(igType===k?' selected':'')+'>'+l+'</option>').join('')+'</select><select class="field" id="igSort" aria-label="Sort by">'+[['new','Newest first'],['views','Most views'],['likes','Most likes'],['comments','Most comments'],['shares','Most shares']].map(([k,l])=>'<option value="'+k+'"'+(igSort===k?' selected':'')+'>'+l+'</option>').join('')+'</select></span></div>'+
     '<div class="table"><div class="trow th igrow"><span>POST</span><span>VIEWS</span><span>REACH</span><span>LIKES</span><span>COMMENTS</span><span>SHARES</span><span>SAVES</span></div>';
   const cell=(e,k)=>{const n=igN(e,k);return '<span class="num" data-l="'+k+'">'+(n==null?(e.a||k==='likes'||k==='comments'?'—':'…'):fmtK(n))+'</span>'};
   list.slice(0,igShow).forEach(id=>{const e=idx[id],m=ig.items[id];if(!m)igPage(e.p||0);
@@ -1170,22 +1170,22 @@ function igPanel(){
   h+='<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Three dots mean the number is still loading. Numbers can be up to 48 hours behind Instagram.</p>';
   return box(h);
 }
-function igTagsBox(ws,ids,idx,rangeTxt,st){
-  const w=wsOf(ws),tags=(w&&w.tags)||[],edit=!!(CSC&&CSC.me&&CSC.me.role!=='pending'&&(st.manage||isAdmin()||canWrite));
-  const stat=t=>{const ps=ids.filter(id=>(idx[id].h||[]).includes(t)),rs=ps.filter(id=>idx[id].k==='R'),v=rs.reduce((n,id)=>n+(igN(idx[id],'views')||0),0);
-    const best=rs.slice().sort((a,b)=>(igN(idx[b],'views')||0)-(igN(idx[a],'views')||0))[0];return {n:ps.length,r:rs.length,v,avg:rs.length?Math.round(v/rs.length):0,best}};
+function inspoTags(ws){
+  const w=wsOf(ws),tags=(w&&w.tags)||[],edit=!!(canWrite||(CSC&&CSC.me&&CSC.me.role==='client'));
+  if(CSC&&CSC.ig)loadIg();
+  const conn=!!(ig.ws===ws&&ig.st&&ig.st.connected&&ig.idx),idx=conn?ig.idx:{},since=Date.now()/1000-90*86400,ids=Object.keys(idx).filter(id=>(idx[id].ts||0)>=since);
   const igUrl=t=>'https://www.instagram.com/explore/tags/'+encodeURIComponent(t)+'/';
-  let h='<div class="chead" style="margin-top:8px"><span class="ctitle" style="font-size:.95rem">Hashtags · '+esc(rangeTxt)+'</span><span class="meta">your posts that use each hashtag</span></div>';
-  if(edit)h+='<div class="row" style="flex-wrap:nowrap"><input class="field grow" id="igTagIn" maxlength="61" placeholder="Add a hashtag to track, e.g. #capgown" aria-label="Hashtag"><button class="btn" data-act="igtagadd">Add</button></div><p class="err" id="igTagErr" hidden></p>';
-  if(!tags.length)h+='<p class="meta">No hashtags tracked yet.'+(edit?' Add the ones you use, like #capgown or #graduationgown.':'')+'</p>';
-  else{h+='<div class="table"><div class="trow th igtrow"><span>HASHTAG</span><span>POSTS</span><span>REEL VIEWS</span><span>AVG / REEL</span><span>BEST REEL</span><span></span></div>';
-    tags.forEach(t=>{const s=stat(t),b=s.best&&idx[s.best],m=s.best&&ig.items[s.best];if(s.best&&!m)igPage(b.p||0);
-      h+='<div class="trow igtrow"><span><button class="linkbtn" data-act="igtagf" data-arg="'+esc(t)+'" title="Show these posts below"><b>#'+esc(t)+'</b></button></span><span class="num" data-l="posts">'+s.n+'</span><span class="num" data-l="views">'+fmtK(s.v)+'</span><span class="num" data-l="avg">'+(s.r?fmtK(s.avg):'—')+'</span><span style="min-width:0">'+(b?'<a class="igcap" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit;text-decoration:none" href="'+esc((m&&safeUrl(m.url))||'#')+'" target="_blank" rel="noopener">'+esc(m?((m.caption||'').split('\n')[0]||'Reel'):'Loading…')+' · '+fmtK(igN(b,'views')||0)+'</a>':'<span class="meta">—</span>')+'</span><span class="row" style="flex-wrap:nowrap;justify-content:flex-end"><a class="btn sm" href="'+igUrl(t)+'" target="_blank" rel="noopener" title="See everyone’s posts with this hashtag on Instagram">Instagram ↗</a>'+(edit?'<button class="btn sm sq" data-act="igtagrm" data-arg="'+esc(t)+'" aria-label="Stop tracking #'+esc(t)+'">'+ic('trash',14)+'</button>':'')+'</span></div>'});
+  let h='<section class="card" style="margin-bottom:16px"><div class="chead"><span class="ctitle">Hashtags</span><span class="meta">Product keywords to watch, like #capgown</span></div>';
+  if(edit)h+='<div class="row" style="flex-wrap:nowrap"><input class="field grow" id="igTagIn" maxlength="61" placeholder="Add a hashtag, e.g. #graduationgown" aria-label="Hashtag"><button class="btn" data-act="igtagadd">Add</button></div><p class="err" id="igTagErr" hidden></p>';
+  if(!tags.length)h+='<p class="meta">No hashtags yet.'+(edit?' Add the ones for your products, like #capgown or #graduationgown.':'')+'</p>';
+  else{h+='<div class="table"><div class="trow th igtrow"><span>HASHTAG</span><span>SAVED HERE</span><span>'+(conn?'YOUR POSTS · 90 DAYS':'')+'</span><span>'+(conn?'AVG VIEWS / REEL':'')+'</span><span></span></div>';
+    tags.forEach(t=>{const saved=inspo.filter(x=>x.ws===ws&&x.tag===t).length,ps=ids.filter(id=>(idx[id].h||[]).includes(t)),rs=ps.filter(id=>idx[id].k==='R'),v=rs.reduce((n,id)=>n+(igN(idx[id],'views')||0),0);
+      h+='<div class="trow igtrow'+(igTag===t?' on':'')+'"><span><button class="linkbtn" data-act="igtagf" data-arg="'+esc(igTag===t?'':t)+'" title="'+(igTag===t?'Show everything':'Show only what is saved for this hashtag')+'"><b>#'+esc(t)+'</b></button></span><span class="num" data-l="saved">'+saved+'</span><span class="num" data-l="posts">'+(conn?ps.length:'')+'</span><span class="num" data-l="avg">'+(conn?(rs.length?fmtK(Math.round(v/rs.length)):'—'):'')+'</span><span class="row" style="flex-wrap:nowrap;justify-content:flex-end"><a class="btn sm" href="'+igUrl(t)+'" target="_blank" rel="noopener" title="See everyone’s posts with this hashtag, including other brands">See on Instagram ↗</a>'+(edit?'<button class="btn sm sq" data-act="igtagrm" data-arg="'+esc(t)+'" aria-label="Remove #'+esc(t)+'">'+ic('trash',14)+'</button>':'')+'</span></div>'});
     h+='</div>'}
-  const cnt={};ids.forEach(id=>(idx[id].h||[]).forEach(t=>{if(!tags.includes(t)){const c=cnt[t]||(cnt[t]={n:0,v:0,r:0});c.n++;if(idx[id].k==='R'){c.r++;c.v+=igN(idx[id],'views')||0}}}));
-  const sug=Object.keys(cnt).filter(t=>cnt[t].n>=2).sort((a,b)=>(cnt[b].r?cnt[b].v/cnt[b].r:0)-(cnt[a].r?cnt[a].v/cnt[a].r:0)).slice(0,8);
-  if(sug.length)h+='<p class="meta" style="margin-bottom:0">Other hashtags in your posts, best first:</p><div class="row" style="flex-wrap:wrap;gap:6px">'+sug.map(t=>'<button class="btn sm" data-act="'+(edit?'igtagadd':'igtagf')+'" data-arg="'+esc(t)+'">#'+esc(t)+' <span class="meta">'+cnt[t].n+'</span></button>').join('')+'</div>';
-  h+='<p class="meta">Numbers come from this account’s own posts. Instagram ↗ opens the hashtag page where you can see what other brands post with it.</p>';
+  if(conn){const cnt={};ids.forEach(id=>(idx[id].h||[]).forEach(t=>{if(!tags.includes(t))cnt[t]=(cnt[t]||0)+1}));
+    const sug=Object.keys(cnt).filter(t=>cnt[t]>=2).sort((a,b)=>cnt[b]-cnt[a]).slice(0,8);
+    if(sug.length&&edit)h+='<p class="meta" style="margin-bottom:0">Hashtags you already use:</p><div class="row" style="flex-wrap:wrap;gap:6px">'+sug.map(t=>'<button class="btn sm" data-act="igtagadd" data-arg="'+esc(t)+'">+ #'+esc(t)+'</button>').join('')+'</div>'}
+  h+='<p class="meta">Open a hashtag on Instagram to see what competitors post with it. Copy the link of any reel you like and paste it above'+(tags.length?'; click a hashtag first and the reel is saved under it':'')+'.</p></section>';
   return h;
 }
 async function igTagSave(ws,tags){const w=wsOf(ws);if(!w)return;const d=Object.assign({},w,{tags});delete d.id;await putWs(ws,d)}
@@ -1256,11 +1256,14 @@ function vInspo(){
   if(!workspaces.length)return h+emptyBox('heart','No workspaces yet','Inspiration is saved inside a client’s workspace.');
   if(canWrite)h+='<section class="card" style="margin-bottom:16px"><div class="inform">'+(one?'':'<select class="field" id="inWs" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')+'</select>')+
     '<input class="field" id="inUrl" data-key="inu" type="url" placeholder="Paste an Instagram, YouTube or TikTok link" aria-label="Link"><input class="field" id="inNote" data-key="inn" maxlength="200" placeholder="What do you like about it? (optional)" aria-label="Note"><button class="btn dark" data-act="addinspo">'+ic('plus')+'Add</button></div><p class="err" id="inErr" hidden></p></section>';
-  if(!list.length)return h+emptyBox('heart','Nothing saved yet','Paste a link above to start your inspiration board.');
+  if(one)h+=inspoTags(one);
+  const tagged=one&&igTag?list.filter(x=>x.tag===igTag):list;
+  if(one&&igTag)h+='<div class="row" style="margin-bottom:10px"><b>Saved for #'+esc(igTag)+'</b><span class="meta">'+tagged.length+'</span><button class="btn sm" data-act="igtagf" data-arg="">Show everything</button></div>';
+  if(!tagged.length)return h+emptyBox('heart',igTag?'Nothing saved for #'+igTag+' yet':'Nothing saved yet',igTag?'Open #'+igTag+' on Instagram, copy a reel’s link and paste it above.':'Paste a link above to start your inspiration board.');
   h+='<div class="inspogrid">';
-  list.forEach(x=>{const w=wsOf(x.ws),u=safeUrl(x.url),em=u?inspoEmbed(u):'';
+  tagged.forEach(x=>{const w=wsOf(x.ws),u=safeUrl(x.url),em=u?inspoEmbed(u):'';
     h+='<section class="card inspocard">'+(em||'<a class="inspolink" href="'+esc(u||'#')+'" target="_blank" rel="noopener">'+ic('link',20)+'<b>'+esc(u?hostOf(u):'Link')+'</b><span class="meta">Open link ↗</span></a>')+
-      (x.note?'<p class="inspnote">'+esc(x.note)+'</p>':'')+
+      (x.tag||x.note?'<p class="inspnote">'+(x.tag?'<b>#'+esc(x.tag)+'</b> ':'')+esc(x.note||'')+'</p>':'')+
       '<div class="row" style="justify-content:space-between"><span class="meta">'+esc(x.by||'Someone')+(x.at?' · '+dayOf(x.at):'')+(curWs==='all'&&w?' · '+esc(w.name):'')+'</span><span class="row" style="flex-wrap:nowrap">'+(u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open ↗</a>':'')+
       (canWrite?(armedDelete==='in:'+x.id?'<button class="btn sm danger" data-act="delinspo" data-id="'+esc(x.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="delinspo" data-id="'+esc(x.id)+'" aria-label="Remove">'+ic('trash',14)+'</button>'):'')+'</span></div></section>'});
   return h+'</div>';
@@ -1627,7 +1630,7 @@ document.addEventListener('click',async ev=>{
     const e=$('#inErr'),u=val('inUrl'),ws=(curWs!=='all'&&wsOf(curWs)?curWs:(workspaces.length===1?workspaces[0].id:val('inWs')));
     if(!safeUrl(u)){e.textContent='Paste a full link that starts with https://';e.hidden=false;return}
     if(!ws){e.textContent='Choose a workspace first.';e.hidden=false;return}
-    const nid=newId('i'),row={ws,url:u.slice(0,500),note:val('inNote').slice(0,200),by:who(),at:Date.now()};
+    const nid=newId('i'),row={ws,url:u.slice(0,500),note:val('inNote').slice(0,200),by:who(),at:Date.now()};if(igTag&&((wsOf(ws)||{}).tags||[]).includes(igTag))row.tag=igTag;
     $('#inUrl').value='';$('#inNote').value='';
     if(db){try{await db.doc('inspo/'+nid).set(row)}catch(x){fail(x)}}else{inspo.push(Object.assign({id:nid},row));renderAll()}
   }
