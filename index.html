@@ -5,7 +5,7 @@
   window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   // A client's private link ends in #c=<their key>: remember it and tidy the address.
-  try{var hm=/^#c=(l_[0-9a-z_]{20,90})$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}}catch(e){}
+  try{var hm=/^#c=((?:l|a)_[0-9a-z_]{20,90})$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}}catch(e){}
   try{var jm=/^#join=([je]_[0-9a-z_]{10,60})$/.exec(location.hash);if(jm)window.CSC.join=jm[1]}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign(KEY?{'x-upload-key':KEY}:{},opt.headers||{});
@@ -34,6 +34,7 @@
   window.CSC.joinProject=function(code){return api('/api/join',{method:'POST',body:JSON.stringify({code:code})})};
   window.CSC.team=function(renew){return api('/api/team',renew?{method:'POST',body:'{}'}:{})};
   window.CSC.teams=function(){return api('/api/teams')};
+  window.CSC.fullLink=function(o){return o?api('/api/full-link',{method:'POST',body:JSON.stringify(o)}):api('/api/full-link')};
   window.CSC.agencyJoin=function(id){return api('/api/agency-join',{method:'POST',body:JSON.stringify({id:id})})};
   window.CSC.joinInfo=function(code){return fetch(BASE+'/api/join-info?code='+encodeURIComponent(code)).then(function(r){return r.ok?r.json():null},function(){return null})};
   window.CSC.users=function(){return api('/api/users').then(function(j){return j.users})};
@@ -622,7 +623,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
+let fullLink=undefined, igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -1322,6 +1323,9 @@ function vAdmin(){
   h+='</section>';
   const vs=videos.slice().sort((a,b)=>videoBytes(b)-videoBytes(a)),tot=vs.reduce((n,v)=>n+videoBytes(v),0);
   {const rq=igApprover()?Object.keys(igReqs).filter(k=>igReqs[k].status==='requested'&&wsOf(k)):[],rx=Object.keys(igOther).filter(k=>igOther[k].status==='requested');if(CSC&&(rq.length||rx.length)){h+='<section class="card" style="margin-bottom:14px;border-color:#e7d3b5;background:#fffaf2"><div class="chead"><span class="ctitle">Instagram access requests</span><span class="meta">'+(rq.length+rx.length)+' waiting</span></div><p class="meta">Add each username as an Instagram Tester in your Meta app (App roles → Roles → Add People → Instagram Tester), then press Mark as added.</p>'+rq.map(k=>'<div class="frow" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>@'+esc(igReqs[k].username)+'</b> <span class="meta">'+esc(wsOf(k).name)+'</span></span><button class="btn sm" data-act="igcopyu" data-arg="'+esc(igReqs[k].username)+'">Copy username</button><a class="btn sm" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta apps ↗</a><button class="btn sm dark" data-act="igreqdone" data-id="'+esc(k)+'">Mark as added</button></div>').join('')+rx.map(k=>'<div class="frow" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>@'+esc(igOther[k].username)+'</b> <span class="meta">'+esc((igOther[k].agency||'Other agency')+(igOther[k].client?' · '+igOther[k].client:''))+'</span></span><button class="btn sm" data-act="igcopyu" data-arg="'+esc(igOther[k].username)+'">Copy username</button><a class="btn sm" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Meta apps ↗</a><button class="btn sm dark" data-act="igreqdonex" data-id="'+esc(k)+'">Mark as added</button></div>').join('')+'</section>'}}
+  if(CSC&&CSC.me&&CSC.me.site&&CSC.fullLink){const on=fullLink&&fullLink.token;
+    h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Full-access link</span>'+(fullLink===undefined?'<span class="meta">Loading…</span>':'<span class="badge'+(on?' blue':'')+'">'+(on?'On':'Off')+'</span>')+'</div><p class="meta">Anyone who opens this link gets the same full access as you: every client, video, analytics and this Admin page. No login needed. Only send it to people you fully trust. New link makes a fresh one and stops the old one; Turn off stops it completely.</p><div class="row">'+
+      (on?'<button class="btn dark" data-act="fullcopy">'+ic('link',14)+'Copy full-access link</button><button class="btn" data-act="fullnew">New link</button>'+(armedDelete==='fulloff'?'<button class="btn danger" data-act="fulloff">Turn off?</button>':'<button class="btn" data-act="fulloff">Turn off</button>'):'<button class="btn dark" data-act="fullnew">'+ic('link',14)+'Create full-access link</button>')+'</div></section>'}
   if(CSC&&CSC.me&&CSC.me.site&&agencies){h+='<section class="card" style="margin-bottom:14px"><div class="chead"><span class="ctitle">Agencies on this site</span><span class="meta">'+agencies.teams.length+(agencies.teams.length===1?' agency':' agencies')+' · all share the same storage</span></div>';
     if(!agencies.teams.length)h+='<p class="meta">No other agency has created a workspace yet. Only you see this list.</p>';
     else{h+='<div class="table"><div class="trow th agrow"><span>AGENCY</span><span>ADMIN EMAIL</span><span>JOINED</span><span>STORAGE USED</span><span></span></div>';agencies.teams.slice().sort((a,b)=>b.createdAt-a.createdAt).forEach(t=>{h+='<div class="trow agrow"><span class="t1">'+esc(t.name)+'</span><span class="meta" style="overflow-wrap:anywhere">'+esc(t.email)+'</span><span class="meta">'+(t.createdAt?new Date(t.createdAt).toLocaleDateString():'')+'</span><span class="meta num">'+(fmtSize(t.bytes)||'0 KB')+'</span><span style="text-align:right"><button class="btn sm" data-act="agjoin" data-id="'+esc(t.id)+'" data-name="'+esc(t.email||t.name)+'">Add as admin</button></span></div>'});h+='</div><p class="meta">You can’t open another agency’s videos. Only you see this list. If someone signed up here but should see your clients and analytics, click Add as admin. Their own empty agency is closed.</p>'}
@@ -1387,7 +1391,7 @@ async function copyJoin(renew){
   if(ok)notice((renew?'New invite link created and copied. The old one no longer works. ':'Editor invite link copied. ')+'Send it to your editor.');else prompt('Copy this link and send it to your editor',u);
   lastHtml='';renderAll();
 }
-function loadPeople(){if(!(CSC&&CSC.users&&isAdmin()))return;if(CSC.ig&&CSC.ig.requests)CSC.ig.requests().then(r=>{igReqs=r.requests||{};igOther=r.other||{};if(view==='admin')renderAll()},()=>{});if(CSC.team&&!teamInfo)CSC.team().then(t=>{teamInfo=t},()=>{});if(CSC.me.site&&CSC.teams)CSC.teams().then(a=>{agencies=a;if(view==='admin')renderAll()},()=>{});if(CSC.links)CSC.links().then(l=>{wsLinks=l||{};if(view==='admin')renderAll()},()=>{});CSC.users().then(u=>{people=u;peopleLoaded=true;if(view==='admin')renderAll()},()=>{})}
+function loadPeople(){if(!(CSC&&CSC.users&&isAdmin()))return;if(CSC.me&&CSC.me.site&&CSC.fullLink&&fullLink===undefined)CSC.fullLink().then(r=>{fullLink=r;if(view==='admin')renderAll()},()=>{fullLink=null});if(CSC.ig&&CSC.ig.requests)CSC.ig.requests().then(r=>{igReqs=r.requests||{};igOther=r.other||{};if(view==='admin')renderAll()},()=>{});if(CSC.team&&!teamInfo)CSC.team().then(t=>{teamInfo=t},()=>{});if(CSC.me.site&&CSC.teams)CSC.teams().then(a=>{agencies=a;if(view==='admin')renderAll()},()=>{});if(CSC.links)CSC.links().then(l=>{wsLinks=l||{};if(view==='admin')renderAll()},()=>{});CSC.users().then(u=>{people=u;peopleLoaded=true;if(view==='admin')renderAll()},()=>{})}
 function pplErr(e){const p=$('#pplErr');if(p){p.textContent=(e&&e.message)||'That did not work. Try again.';p.hidden=false}}
 function videoBytes(v){return materials(v).reduce((n,m)=>n+(m.size||0),0)+(v.editedSize||0)+(v.edits||[]).reduce((n,e)=>n+(e.size||0),0)}
 function vSettings(){
@@ -1576,7 +1580,7 @@ document.addEventListener('click',async ev=>{
   const pk=ev.target.closest('[data-pick]');if(pk){const i=document.getElementById(pk.dataset.pick);if(i)i.click();return}
   const b=ev.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,id=b.dataset.id,v=id?videos.find(x=>x.id===id):null;
-  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin','newinvite','delinspo','igoff'].includes(act)&&armedDelete)armedDelete=null;
+  if(!['delete','delver','rmaccess','delws','newlink','pplrm','newjoin','newinvite','delinspo','igoff','fulloff'].includes(act)&&armedDelete)armedDelete=null;
   if(act==='menu'){const sd=$('#side'),o=!sd.classList.contains('open');sd.classList.toggle('open',o);b.setAttribute('aria-expanded',String(o));return}
   if(b.closest&&b.closest('#side'))$('#side').classList.remove('open');
   if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
@@ -1667,6 +1671,9 @@ document.addEventListener('click',async ev=>{
   else if(act==='nojoin'){location.hash='';location.reload()}
   else if(act==='newlink'){if(armedDelete!=='ln:'+id){armedDelete='ln:'+id;renderAll();return}armedDelete=null;await copyLink(id,true)}
   else if(act==='showpw'){const p=$('#authPw');p.type=p.type==='password'?'text':'password';b.textContent=p.type==='password'?'Show':'Hide'}
+  else if(act==='fullnew'){b.disabled=true;try{fullLink=await CSC.fullLink({renew:true});const u=clientUrl(fullLink.token);let ok=false;try{await navigator.clipboard.writeText(u);ok=true}catch(e){}if(ok)notice('Full-access link created and copied. Any older full-access link no longer works.');else prompt('Copy this full-access link',u)}catch(x){fail(x)}renderAll()}
+  else if(act==='fullcopy'){const u=clientUrl(fullLink.token);let ok=false;try{await navigator.clipboard.writeText(u);ok=true}catch(e){}if(ok)notice('Full-access link copied. Anyone with it has full access.');else prompt('Copy this full-access link',u)}
+  else if(act==='fulloff'){if(armedDelete!=='fulloff'){armedDelete='fulloff';renderAll();return}armedDelete=null;try{fullLink=await CSC.fullLink({off:true});notice('Full-access link turned off. It no longer works.')}catch(x){fail(x)}renderAll()}
   else if(act==='agjoin'){if(!confirm('Make '+b.dataset.name+' an admin of your workspace? They will see all your clients, videos and analytics, and their own agency here will be closed.'))return;b.disabled=true;try{await CSC.agencyJoin(id);notice('Done. They now see your workspace. Ask them to refresh the page.')}catch(x){fail(x)}if(CSC.teams)CSC.teams().then(r=>{agencies=r;renderAll()},()=>{});peopleLoaded=false;loadPeople()}
   else if(act==='ppladm'){b.disabled=true;try{await CSC.userUpdate({id,role:b.dataset.arg})}catch(x){pplErr(x)}loadPeople()}
   else if(act==='pplok'){b.disabled=true;try{await CSC.userUpdate({id,ok:true})}catch(x){pplErr(x)}loadPeople()}
