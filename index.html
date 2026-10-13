@@ -1183,9 +1183,9 @@ function inspoTags(ws){
   if(CSC&&CSC.ig)loadIg();
   const conn=!!(ig.ws===ws&&ig.st&&ig.st.connected&&ig.idx),idx=conn?ig.idx:{},since=Date.now()/1000-90*86400,ids=Object.keys(idx).filter(id=>(idx[id].ts||0)>=since);
   const igUrl=t=>'https://www.instagram.com/explore/tags/'+encodeURIComponent(t)+'/';
-  let h='<section class="card" style="margin-bottom:16px"><div class="chead"><span class="ctitle">Hashtags'+(igWs()?'':' · '+esc(w?wsLabel(w):''))+'</span><span class="meta">Product keywords to watch, like #capgown</span></div>';
-  if(edit)h+='<div class="row" style="flex-wrap:nowrap"><input class="field grow" id="igTagIn" maxlength="61" placeholder="Add a hashtag, e.g. #graduationgown" aria-label="Hashtag"><button class="btn" data-act="igtagadd">Add</button></div><p class="err" id="igTagErr" hidden></p>';
-  if(!tags.length)h+='<p class="meta">No hashtags yet.'+(edit?' Add the ones for your products, like #capgown or #graduationgown.':'')+'</p>';
+  let h='<section class="card" style="margin-bottom:16px"><div class="chead"><span class="ctitle">Hashtags'+(igWs()?'':' · '+esc(w?wsLabel(w):''))+'</span><span class="meta">Product keywords to watch</span></div>';
+  if(edit)h+='<div class="row" style="flex-wrap:nowrap"><input class="field grow" id="igTagIn" maxlength="61" placeholder="Add a hashtag, e.g. #yourproduct" aria-label="Hashtag"><button class="btn" data-act="igtagadd">Add</button></div><p class="err" id="igTagErr" hidden></p>';
+  if(!tags.length)h+='<p class="meta">No hashtags yet.'+(edit?' Add the hashtags for your products, like #yourproduct or #yourbrand.':'')+'</p>';
   else{h+='<div class="table"><div class="trow th igtrow"><span>HASHTAG</span><span>SAVED HERE</span><span>'+(conn?'YOUR POSTS · 90 DAYS':'')+'</span><span>'+(conn?'AVG VIEWS / REEL':'')+'</span><span></span></div>';
     tags.forEach(t=>{const saved=inspo.filter(x=>x.ws===ws&&x.tag===t).length,ps=ids.filter(id=>(idx[id].h||[]).includes(t)),rs=ps.filter(id=>idx[id].k==='R'),v=rs.reduce((n,id)=>n+(igN(idx[id],'views')||0),0);
       h+='<div class="trow igtrow'+(igTag===t?' on':'')+'"><span><button class="linkbtn" data-act="igtagf" data-arg="'+esc(igTag===t?'':t)+'" title="'+(igTag===t?'Show everything':'Show only what is saved for this hashtag')+'"><b>#'+esc(t)+'</b></button></span><span class="num" data-l="saved">'+saved+'</span><span class="num" data-l="posts">'+(conn?ps.length:'')+'</span><span class="num" data-l="avg">'+(conn?(rs.length?fmtK(Math.round(v/rs.length)):'—'):'')+'</span><span class="row" style="flex-wrap:nowrap;justify-content:flex-end"><a class="btn sm" href="'+igUrl(t)+'" target="_blank" rel="noopener" title="See everyone’s posts with this hashtag, including other brands">See on Instagram ↗</a>'+(edit?'<button class="btn sm sq" data-act="igtagrm" data-arg="'+esc(t)+'" aria-label="Remove #'+esc(t)+'">'+ic('trash',14)+'</button>':'')+'</span></div>'});
@@ -1459,7 +1459,7 @@ function openDlg(kind,id,arg){
   dlgKind=kind;dlgId=id||null;dlgArg=arg||null;
   const v=id?videos.find(x=>x.id===id):null,f=$('#dlgForm');let h='';
   if(kind==='new-ws'){
-    h=isClient()?'<h2>New project</h2><p class="meta">A separate space with its own videos, editor and Instagram account. Your editor link for it is on the Workspaces page.</p><label>Project name<input id="f-name" required maxlength="60" placeholder="e.g. Capgown Podcast"></label>'+acts('Create project'):'<h2>New client</h2><label>Client or team name<input id="f-name" required maxlength="60" placeholder="e.g. CapGown"></label>'+acts('Add client');
+    h=isClient()?'<h2>New project</h2><p class="meta">A separate space with its own videos, editor and Instagram account. Your editor link for it is on the Workspaces page.</p><label>Project name<input id="f-name" required maxlength="60" placeholder="e.g. Brand Podcast"></label>'+acts('Create project'):'<h2>New client</h2><label>Client or team name<input id="f-name" required maxlength="60" placeholder="e.g. Brand name"></label>'+acts('Add client');
   }else if(kind==='renws'){
     const w=wsOf(id);if(!w)return;
     h='<h2>Rename client</h2><label>Client name<input id="f-name" required maxlength="60" value="'+esc(w.name)+'"></label>'+acts('Save');
@@ -1642,7 +1642,7 @@ document.addEventListener('click',async ev=>{
   else if(act==='igrequndo'){try{await CSC.ig.requestDone(igWs(),true)}catch(x){}loadIg(true);renderAll()}
   else if(act==='igtagf'){igTag=b.dataset.arg||'';igShow=30;renderAll()}
   else if(act==='igtagadd'){const ws=tagWs(),w=wsOf(ws);if(!w)return;const inp=$('#igTagIn'),raw=(b.dataset.arg||(inp&&inp.value)||'').trim().replace(/^#/,'').toLowerCase();
-    if(!/^[\p{L}\p{M}\p{N}_]{1,60}$/u.test(raw)){const e=$('#igTagErr');if(e){e.textContent='Type one hashtag, like #capgown (letters, numbers and _ only).';e.hidden=false}return}
+    if(!/^[\p{L}\p{M}\p{N}_]{1,60}$/u.test(raw)){const e=$('#igTagErr');if(e){e.textContent='Type one hashtag, like #yourproduct (letters, numbers and _ only).';e.hidden=false}return}
     const tags=(w.tags||[]).filter(t=>t!==raw).concat([raw]).slice(-30);b.disabled=true;await igTagSave(ws,tags);if(inp)inp.value=''}
   else if(act==='igtagrm'){const ws=tagWs(),w=wsOf(ws);if(!w)return;if(igTag===b.dataset.arg)igTag='';await igTagSave(ws,(w.tags||[]).filter(t=>t!==b.dataset.arg))}
   else if(act==='igreqdonex'){b.disabled=true;try{await CSC.ig.requestDoneX(id,false);notice('Marked as added. They now see how to accept the invite and connect.')}catch(x){fail(x)}if(igOther[id])igOther[id].status='added';loadPeople();renderAll()}
