@@ -5,7 +5,7 @@
   window.CSC={api:BASE,maxBytes:5*1024*1024*1024,direct:true,me:null,signOut:function(){try{localStorage.removeItem('csc.pass')}catch(e){}location.href='/'}};
   var KEY='';try{KEY=localStorage.getItem('csc.pass')||''}catch(e){}
   // A client's private link ends in #c=<their key>: remember it and tidy the address.
-  try{var hm=/^#c=((?:l|a)_[0-9a-z_]{20,90})$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}}catch(e){}
+  try{var hm=/^#c=((?:l|a)_[0-9a-z_]{20,90})(?:\/([a-z]+))?(?:\/([^/]+))?\/?$/.exec(location.hash);if(hm){KEY=hm[1];try{localStorage.setItem('csc.pass',KEY)}catch(e){}if(hm[3])window.CSC.open={w:hm[3]};history.replaceState(null,'',location.pathname+location.search+(hm[2]?'#'+hm[2]:''))}}catch(e){}
   try{var jm=/^#join=([je]_[0-9a-z_]{10,60})$/.exec(location.hash);if(jm)window.CSC.join=jm[1]}catch(e){}
   var CHUNK=50*1024*1024;
   function api(path,opt){opt=opt||{};opt.headers=Object.assign(KEY?{'x-upload-key':KEY}:{},opt.headers||{});
@@ -1409,7 +1409,13 @@ function vSettings(){
     (isOwner()?'<div class="row" style="flex-wrap:nowrap"><input id="upUrl" class="field grow" type="url" placeholder="https://…workers.dev" value="'+esc(appSettings.uploaderUrl||'')+'"><button class="btn" data-act="saveset">Save</button></div><p class="err" id="setErr" hidden></p>':'<p class="meta">'+(safeUrl(appSettings.uploaderUrl)?esc(appSettings.uploaderUrl):'Not set up yet.')+'</p>')+
     (usage&&usage.maxBytes?'<span class="ctitle">Storage</span><p class="meta">'+(fmtSize(usage.bytes)||'0 KB')+' of '+fmtSize(usage.maxBytes)+' used · '+usage.files+' files · '+LIM+' per file</p>':'')+'</section></div>';
 }
-function renderAll(){
+function applyOpen(){
+  const o=window.CSC&&CSC.open;if(!o||!wsLoaded||!vidLoaded)return;CSC.open=null;
+  let k='';try{k=decodeURIComponent(o.w)}catch(e){k=o.w}k=k.toLowerCase().replace(/[-_+]+/g,' ').trim();
+  const c=workspaces.filter(w=>w.id===o.w||(w.name||'').toLowerCase().trim()===k).sort((a,b)=>videos.filter(v=>v.ws===b.id).length-videos.filter(v=>v.ws===a.id).length);
+  if(c[0]){curWs=c[0].id;LS.set('csc.ws',curWs)}
+}
+function renderAll(){applyOpen();
   if(CSC&&CSC.me&&CSC.me.role!=='pending'&&!isAdmin()&&['team','admin'].includes(view))view='videos';
   document.body.classList.toggle('authpage',!!(CSC&&(!CSC.me||CSC.me.role==='pending')));
   renderSide();renderTop();
