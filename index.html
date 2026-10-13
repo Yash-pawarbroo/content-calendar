@@ -623,7 +623,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let inspoWs='', fullLink=undefined, igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
+let igConn={}, inspoWs='', fullLink=undefined, igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -1130,7 +1130,7 @@ function igPanel(){
   if(!CSC)return box(head+'<span class="badge">Live site only</span></div><p class="meta">Connecting Instagram and live numbers work on the live site, not in this preview.</p>');
   if(!CSC.ig)return '';
   const ws=igWs();
-  if(!ws)return box(head+'</div><p class="meta">Choose a workspace at the top left to see its Instagram account and all of its posts.</p>');
+  if(!ws)return box(head+'</div><p class="meta">Each client has their own Instagram. Pick one to see the whole account: every post and reel with views, likes, comments, shares and saves.</p><div class="row" style="flex-wrap:wrap;gap:6px">'+workspaces.map(w=>{if(!(w.id in igConn)){igConn[w.id]=null;CSC.ig.status(w.id).then(s=>{igConn[w.id]=s&&s.connected?(s.username||'connected'):'';renderAll()},()=>{igConn[w.id]=''})}const u=igConn[w.id];return '<button class="btn'+(u?' dark':'')+'" data-act="inspows" data-ws="'+esc(w.id)+'">'+ic('insta',14)+esc(wsLabel(w))+(u?' · @'+esc(u):u===''?' · not connected':'')+'</button>'}).join('')+'</div>');
   loadIg();
   const st=ig.st;
   if(!st)return box(head+'</div><p class="'+(ig.err?'err':'meta')+'">'+esc(ig.err||'Checking Instagram…')+'</p>');
@@ -1596,7 +1596,7 @@ document.addEventListener('click',async ev=>{
   if(act==='nav'){if(b.dataset.view==='videos')curStage='all';go(b.dataset.view)}
   else if(act==='stage'){curStage=b.dataset.stage;go('videos')}
   else if(act==='addws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);renderTop();openDlg('add')}
-  else if(act==='inspows'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);renderAll()}
+  else if(act==='inspows'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);if(view==='analytics')igRange='all';renderAll()}
   else if(act==='ws'){curWs=b.dataset.ws;LS.set('csc.ws',curWs);curStage='all';go('videos')}
   else if(act==='open')go('project',id);
   else if(act==='asel'){anVideo=id;if(view!=='analytics')go('analytics');else renderAll()}
