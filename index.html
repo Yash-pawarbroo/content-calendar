@@ -623,7 +623,7 @@ let view='videos', curVideo=null, curStage='all', q='', metricTab='likes';
 let weekStart=monday(new Date()), anVideo=null;
 const pendingEdit={};
 let appSettings={}, access=[];
-let fullLink=undefined, igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
+let inspoWs='', fullLink=undefined, igOther={}, authMode='login', authRole='editor', authV={}, people=[], peopleLoaded=false, wsLinks={}, igReqs={}, teamInfo=null, agencies=null, inspo=[], ig={ws:'',st:null,idx:null,pg:{},items:{},loading:false,busy:false,left:0,err:'',note:''}, igSort='new', igType='all', igRange='30', igTag='', igShow=30, inviteUrl='', joinAuto=false, joinName='', joinBad=false;
 function bigLink(){const u=safeUrl(appSettings.uploaderUrl);return u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+ic('up',14)+'Upload a large file ↗</a>':''}
 let dlgKind=null, dlgId=null, dlgArg=null, armedDelete=null, pickCtx=null, lastHtml='';
 
@@ -1174,12 +1174,14 @@ function igPanel(){
   h+='<p class="meta">A dash means Instagram has no number for that post, which is normal for very old posts and for some carousels. Three dots mean the number is still loading. Numbers can be up to 48 hours behind Instagram.</p>';
   return box(h);
 }
+function tagWs(){const o=igWs();if(o)return o;if(!wsOf(inspoWs)){const w=workspaces.find(x=>(x.tags||[]).length)||workspaces[0];inspoWs=w?w.id:''}return inspoWs}
+function wsLabel(w){const dup=workspaces.filter(x=>x.name===w.name).length>1,n=videos.filter(v=>v.ws===w.id).length;return w.name+(dup?' ('+n+(n===1?' video':' videos')+')':'')}
 function inspoTags(ws){
   const w=wsOf(ws),tags=(w&&w.tags)||[],edit=!!(canWrite||(CSC&&CSC.me&&CSC.me.role==='client'));
   if(CSC&&CSC.ig)loadIg();
   const conn=!!(ig.ws===ws&&ig.st&&ig.st.connected&&ig.idx),idx=conn?ig.idx:{},since=Date.now()/1000-90*86400,ids=Object.keys(idx).filter(id=>(idx[id].ts||0)>=since);
   const igUrl=t=>'https://www.instagram.com/explore/tags/'+encodeURIComponent(t)+'/';
-  let h='<section class="card" style="margin-bottom:16px"><div class="chead"><span class="ctitle">Hashtags</span><span class="meta">Product keywords to watch, like #capgown</span></div>';
+  let h='<section class="card" style="margin-bottom:16px"><div class="chead"><span class="ctitle">Hashtags'+(igWs()?'':' · '+esc(w?wsLabel(w):''))+'</span><span class="meta">Product keywords to watch, like #capgown</span></div>';
   if(edit)h+='<div class="row" style="flex-wrap:nowrap"><input class="field grow" id="igTagIn" maxlength="61" placeholder="Add a hashtag, e.g. #graduationgown" aria-label="Hashtag"><button class="btn" data-act="igtagadd">Add</button></div><p class="err" id="igTagErr" hidden></p>';
   if(!tags.length)h+='<p class="meta">No hashtags yet.'+(edit?' Add the ones for your products, like #capgown or #graduationgown.':'')+'</p>';
   else{h+='<div class="table"><div class="trow th igtrow"><span>HASHTAG</span><span>SAVED HERE</span><span>'+(conn?'YOUR POSTS · 90 DAYS':'')+'</span><span>'+(conn?'AVG VIEWS / REEL':'')+'</span><span></span></div>';
@@ -1258,13 +1260,13 @@ function vInspo(){
   const one=curWs!=='all'&&wsOf(curWs)?curWs:(workspaces.length===1?workspaces[0].id:''),list=inspo.filter(x=>curWs==='all'||x.ws===curWs).sort((a,b)=>(b.at||0)-(a.at||0));
   let h='<div class="pagehead"><div><div class="eyebrow">'+esc(one&&wsOf(one)?wsOf(one).name.toUpperCase()+' · WORKSPACE':'ALL WORKSPACES')+'</div><h2 class="ptitle">Inspiration</h2><p class="meta">Save reels, videos and posts you want to take ideas from. Everyone on the workspace sees them.</p></div></div>';
   if(!workspaces.length)return h+emptyBox('heart','No workspaces yet','Inspiration is saved inside a client’s workspace.');
-  if(canWrite)h+='<section class="card" style="margin-bottom:16px"><div class="inform">'+(one?'':'<select class="field" id="inWs" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')+'</select>')+
+  if(canWrite)h+='<section class="card" style="margin-bottom:16px"><div class="inform">'+(one?'':'<select class="field" id="inWs" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'"'+(w.id===tagWs()?' selected':'')+'>'+esc(wsLabel(w))+'</option>').join('')+'</select>')+
     '<input class="field" id="inUrl" data-key="inu" type="url" placeholder="Paste an Instagram, YouTube or TikTok link" aria-label="Link"><input class="field" id="inNote" data-key="inn" maxlength="200" placeholder="What do you like about it? (optional)" aria-label="Note"><button class="btn dark" data-act="addinspo">'+ic('plus')+'Add</button></div><p class="err" id="inErr" hidden></p></section>';
   if(one)h+=inspoTags(one);
-  else h+='<section class="card" style="margin-bottom:16px"><div class="chead"><span class="ctitle">Hashtags</span><span class="meta">Each client has their own hashtags</span></div><p class="meta">Pick a client to see and add their hashtags, like #capgown, and save reels under them.</p><div class="row" style="flex-wrap:wrap;gap:6px">'+workspaces.map(w=>'<button class="btn sm" data-act="inspows" data-ws="'+esc(w.id)+'">'+esc(w.name)+((w.tags||[]).length?' <span class="meta">'+w.tags.length+' #</span>':'')+'</button>').join('')+'</div></section>';
-  const tagged=one&&igTag?list.filter(x=>x.tag===igTag):list;
-  if(one&&igTag)h+='<div class="row" style="margin-bottom:10px"><b>Saved for #'+esc(igTag)+'</b><span class="meta">'+tagged.length+'</span><button class="btn sm" data-act="igtagf" data-arg="">Show everything</button></div>';
-  const addTile=one&&canWrite;
+  else if(workspaces.length)h+=inspoTags(tagWs());
+  const tagged=igTag?list.filter(x=>x.tag===igTag&&x.ws===(one||tagWs())):list;
+  if(igTag)h+='<div class="row" style="margin-bottom:10px"><b>Saved for #'+esc(igTag)+'</b><span class="meta">'+tagged.length+'</span><button class="btn sm" data-act="igtagf" data-arg="">Show everything</button></div>';
+  const addTile=canWrite&&!!(one||tagWs());
   if(!tagged.length&&!addTile)return h+emptyBox('heart',igTag?'Nothing saved for #'+igTag+' yet':'Nothing saved yet',igTag?'Open #'+igTag+' on Instagram, copy a reel’s link and paste it above.':'Paste a link above to start your inspiration board.');
   h+='<div class="inspogrid">';
   tagged.forEach(x=>{const w=wsOf(x.ws),u=safeUrl(x.url),em=u?inspoEmbed(u):'';
@@ -1272,7 +1274,7 @@ function vInspo(){
       (x.tag||x.note?'<p class="inspnote">'+(x.tag?'<b>#'+esc(x.tag)+'</b> ':'')+esc(x.note||'')+'</p>':'')+
       '<div class="row" style="justify-content:space-between"><span class="meta">'+esc(x.by||'Someone')+(x.at?' · '+dayOf(x.at):'')+(curWs==='all'&&w?' · '+esc(w.name):'')+'</span><span class="row" style="flex-wrap:nowrap">'+(u?'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">Open ↗</a>':'')+
       (canWrite?(armedDelete==='in:'+x.id?'<button class="btn sm danger" data-act="delinspo" data-id="'+esc(x.id)+'">Remove?</button>':'<button class="btn sm sq" data-act="delinspo" data-id="'+esc(x.id)+'" aria-label="Remove">'+ic('trash',14)+'</button>'):'')+'</span></div></section>'});
-  if(addTile){const tags=(wsOf(one)||{}).tags||[];
+  if(addTile){const tags=(wsOf(one||tagWs())||{}).tags||[];
     h+='<section class="card inspocard inspoadd"><div class="inspoaddtop">'+ic('plus',22)+'<b>Save a reel here</b><span class="meta">Copy a reel’s link on Instagram (Share → Copy link), then paste it below. You can also press Ctrl+V anywhere on this page.</span></div>'+
       '<input class="field" id="inUrl2" data-key="inu2" type="url" placeholder="Paste the link" aria-label="Link">'+
       (tags.length?'<select class="field" id="inTag2" aria-label="Hashtag"><option value="">No hashtag</option>'+tags.map(t=>'<option value="'+esc(t)+'"'+(igTag===t?' selected':'')+'>#'+esc(t)+'</option>').join('')+'</select>':'')+
@@ -1630,10 +1632,10 @@ document.addEventListener('click',async ev=>{
   else if(act==='igreq'){const u=val('igUser'),e=$('#igErr');if(!u){if(e){e.textContent='Enter your Instagram username.';e.hidden=false}return}b.disabled=true;try{await CSC.ig.request(igWs(),u);notice('Request sent. The admin will add your Instagram account.');loadIg(true);renderAll()}catch(x){b.disabled=false;if(e){e.textContent=x.message||'That did not work.';e.hidden=false}}}
   else if(act==='igrequndo'){try{await CSC.ig.requestDone(igWs(),true)}catch(x){}loadIg(true);renderAll()}
   else if(act==='igtagf'){igTag=b.dataset.arg||'';igShow=30;renderAll()}
-  else if(act==='igtagadd'){const ws=igWs(),w=wsOf(ws);if(!w)return;const inp=$('#igTagIn'),raw=(b.dataset.arg||(inp&&inp.value)||'').trim().replace(/^#/,'').toLowerCase();
+  else if(act==='igtagadd'){const ws=tagWs(),w=wsOf(ws);if(!w)return;const inp=$('#igTagIn'),raw=(b.dataset.arg||(inp&&inp.value)||'').trim().replace(/^#/,'').toLowerCase();
     if(!/^[\p{L}\p{M}\p{N}_]{1,60}$/u.test(raw)){const e=$('#igTagErr');if(e){e.textContent='Type one hashtag, like #capgown (letters, numbers and _ only).';e.hidden=false}return}
     const tags=(w.tags||[]).filter(t=>t!==raw).concat([raw]).slice(-30);b.disabled=true;await igTagSave(ws,tags);if(inp)inp.value=''}
-  else if(act==='igtagrm'){const ws=igWs(),w=wsOf(ws);if(!w)return;if(igTag===b.dataset.arg)igTag='';await igTagSave(ws,(w.tags||[]).filter(t=>t!==b.dataset.arg))}
+  else if(act==='igtagrm'){const ws=tagWs(),w=wsOf(ws);if(!w)return;if(igTag===b.dataset.arg)igTag='';await igTagSave(ws,(w.tags||[]).filter(t=>t!==b.dataset.arg))}
   else if(act==='igreqdonex'){b.disabled=true;try{await CSC.ig.requestDoneX(id,false);notice('Marked as added. They now see how to accept the invite and connect.')}catch(x){fail(x)}if(igOther[id])igOther[id].status='added';loadPeople();renderAll()}
   else if(act==='igreqdone'){b.disabled=true;try{await CSC.ig.requestDone(id||igWs(),false);notice('Marked as added. The client now sees how to accept the invite and connect.')}catch(x){fail(x)}if(igReqs[id])igReqs[id].status='added';loadIg(true);loadPeople();renderAll()}
   else if(act==='igcopyu'){try{await navigator.clipboard.writeText(b.dataset.arg);notice('Copied @'+b.dataset.arg)}catch(x){prompt('Instagram username',b.dataset.arg)}}
@@ -1651,7 +1653,7 @@ document.addEventListener('click',async ev=>{
     if(db){try{await db.doc('inspo/'+nid).set(row)}catch(x){fail(x)}}else{inspo.push(Object.assign({id:nid},row));renderAll()}
   }
   else if(act==='addinspo2'){
-    const e=$('#inErr2'),u=val('inUrl2').trim(),ws=igWs(),tg=$('#inTag2')?$('#inTag2').value:'';
+    const e=$('#inErr2'),u=val('inUrl2').trim(),ws=tagWs(),tg=$('#inTag2')?$('#inTag2').value:'';
     if(!safeUrl(u)){e.textContent='Paste a full link that starts with https://';e.hidden=false;return}
     if(!ws){e.textContent='Choose a workspace first.';e.hidden=false;return}
     const nid=newId('i'),row={ws,url:u.slice(0,500),note:val('inNote2').slice(0,200),by:who(),at:Date.now()};if(tg)row.tag=tg;
@@ -1785,6 +1787,7 @@ document.addEventListener('change',e=>{
   else if((t.id==='roleSel'||t.id==='roleSel2')&&(!CSC||isGuest()||isAdmin())){role=t.value;LS.set('csc.role',role);renderAll()}
   else if(t.id==='igSort'){igSort=t.value;renderAll()}
   else if(t.id==='igType'){igType=t.value;igShow=30;renderAll()}
+  else if(t.id==='inWs'){inspoWs=t.value;igTag='';renderAll()}
   else if(t.id==='igRange'){igRange=t.value;igShow=30;renderAll()}
   else if(t.id==='wsSel'){curWs=t.value;LS.set('csc.ws',curWs);if(view==='project')go('videos');else renderAll()}
   else if(t.type==='file'&&t.id!=='rowPick'){const s=document.getElementById('p-'+t.id);if(s)s.textContent=t.files&&t.files[0]?t.files[0].name:'No file chosen'}
